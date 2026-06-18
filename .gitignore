@@ -1,0 +1,19 @@
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Keep templates
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
