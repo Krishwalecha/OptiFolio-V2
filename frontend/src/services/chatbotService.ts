@@ -1,4 +1,4 @@
-const WEBHOOK_URL = "http://localhost:5678/webhook/investing-chat";
+const WEBHOOK_URL = import.meta.env.VITE_WEBHOOK_URL;
 
 interface ChatbotResponse {
   success: boolean;

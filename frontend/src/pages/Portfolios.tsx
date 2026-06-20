@@ -51,6 +51,8 @@ const fmtDate = (s: string) => {
   });
 };
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
 const Portfolios: React.FC = () => {
   const { isLoggedIn, userId, userName } = useAuth();
   const [groups, setGroups] = useState<PortfolioGroup[]>([]);
@@ -76,9 +78,7 @@ const Portfolios: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `http://localhost:5000/api/userPortfolios/${userId}`,
-      );
+      const res = await fetch(`${API_BASE}/api/userPortfolios/${userId}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const { portfolioGroups: raw } = await res.json();
       if (!raw?.length) {
@@ -153,7 +153,7 @@ const Portfolios: React.FC = () => {
     setIsAdding(true);
     setAddError(null);
     try {
-      const res = await fetch("http://localhost:5000/api/addPortfolio", {
+      const res = await fetch(`${API_BASE}/api/addPortfolio`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -178,7 +178,7 @@ const Portfolios: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (!toDelete || !userId) return;
     try {
-      const res = await fetch("http://localhost:5000/api/deletePortfolio", {
+      const res = await fetch(`${API_BASE}/api/deletePortfolio`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: toDelete.ticker, userId }),

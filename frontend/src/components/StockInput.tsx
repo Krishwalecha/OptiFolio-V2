@@ -194,6 +194,8 @@ function readAndClearCart(): StockRow[] {
   return [{ ticker: "", isLoading: false, isVerified: false }];
 }
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
 const StockInput: React.FC = () => {
   const { toast } = useToast();
   const { theme } = useTheme();
@@ -260,9 +262,7 @@ const StockInput: React.FC = () => {
   const loadSavedRiskProfile = async () => {
     setIsLoadingSavedProfile(true);
     try {
-      const res = await fetch(
-        `http://localhost:5000/api/userRiskProfile/${userId}`,
-      );
+      const res = await fetch(`${API_BASE}/api/userRiskProfile/${userId}`);
       if (res.ok) {
         const data: SavedRiskProfile = await res.json();
         setSavedProfile(data);
@@ -291,7 +291,7 @@ const StockInput: React.FC = () => {
     profileData: UserProfile,
   ) => {
     try {
-      const res = await fetch("http://localhost:5000/api/saveRiskProfile", {
+      const res = await fetch(`${API_BASE}/api/saveRiskProfile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, breakdown, profile, profileData }),
@@ -470,7 +470,7 @@ const StockInput: React.FC = () => {
       return ns;
     });
     try {
-      const res = await fetch("http://localhost:5000/api/updateStock", {
+      const res = await fetch(`${API_BASE}/api/updateStock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: t }),
@@ -536,7 +536,7 @@ const StockInput: React.FC = () => {
   };
 
   const fetchOptimizationResults = async (currentUserId: string) => {
-    const res = await fetch("http://localhost:5000/api/optimizationResults");
+    const res = await fetch(`${API_BASE}/api/optimizationResults`);
     if (!res.ok) throw new Error("Failed");
     const data = await res.json();
     const alloc = data.allocation as Record<string, number>;
@@ -558,7 +558,7 @@ const StockInput: React.FC = () => {
       })),
     );
     try {
-      await fetch("http://localhost:5000/api/saveAllocations", {
+      await fetch(`${API_BASE}/api/saveAllocations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -674,21 +674,18 @@ const StockInput: React.FC = () => {
       } else {
         finalProfile = selectedRiskProfile;
       }
-      const storeRes = await fetch(
-        "http://localhost:5000/api/storeUserRequest",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stocks: stocks.map((s) => ({ ticker: s.ticker })),
-            totalAmount,
-            riskProfile: finalProfile,
-            userId: currentUserId,
-          }),
-        },
-      );
+      const storeRes = await fetch(`${API_BASE}/api/storeUserRequest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stocks: stocks.map((s) => ({ ticker: s.ticker })),
+          totalAmount,
+          riskProfile: finalProfile,
+          userId: currentUserId,
+        }),
+      });
       if (!storeRes.ok) throw new Error("Store failed");
-      const runRes = await fetch("http://localhost:5000/api/runOptimizer", {
+      const runRes = await fetch(`${API_BASE}/api/runOptimizer`, {
         method: "POST",
       });
       if (!runRes.ok) throw new Error("Optimizer failed");

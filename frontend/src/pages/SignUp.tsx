@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, ArrowRight, Check, X } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 
+const API_BASE = import.meta.env.VITE_API_URL;
 const SignUp: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -39,7 +40,7 @@ const SignUp: React.FC = () => {
       return setError("Passwords do not match.");
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/signup", {
+      const res = await fetch(`${API_BASE}/api/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
