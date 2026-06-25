@@ -5,6 +5,8 @@ import { useAuth } from "@/context/AuthContext";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
 const SignIn: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -26,7 +28,7 @@ const SignIn: React.FC = () => {
       return setError("All fields are required.");
     setLoading(true);
     try {
-      const res = await fetch("https://stock-optimize.vercel.app/api/signin", {
+      const res = await fetch(`${API_BASE}/api/signin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
