@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
 import { Trash2, AlertCircle, Loader2 } from "lucide-react";
-import StockChart from "@/components/StockChart";
+import StockChart from "@/components/charts/StockChart";
 import {
   AlertDialog,
   AlertDialogAction,

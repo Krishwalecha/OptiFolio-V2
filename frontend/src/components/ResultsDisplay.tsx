@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import StockChart, { ChartPoint } from "./StockChart";
+import StockChart, { ChartPoint } from "./charts/StockChart";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, TrendingDown, PieChart, ShieldCheck, ChevronDown, XCircle } from "lucide-react";
 import { OptimizeResult, DroppedStock } from "@/services/optimizerService";

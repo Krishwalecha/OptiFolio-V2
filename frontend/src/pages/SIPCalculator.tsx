@@ -24,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { useMF, CATEGORIES, FundData } from "@/context/MFContext";
-import FundNavChart from "@/components/FundNavChart";
+import FundNavChart from "@/components/charts/FundNavChart";
 
 import type { SavedCalc } from "@/features/sip/types";
 import { GOAL_PRESETS, RISK_PROFILES } from "@/features/sip/config";
