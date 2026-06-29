@@ -1094,6 +1094,29 @@ app.get("/api/news/portfolio", async (req, res) => {
   return res.json({ articles: dedupArticles(all), nameMap });
 });
 
+// ── Chatbot proxy (keeps n8n URL + secret server-side) ───────────────────────
+app.post("/api/chat", async (req, res) => {
+  const webhookUrl = process.env.N8N_WEBHOOK_URL;
+  const secret     = process.env.N8N_WEBHOOK_SECRET;
+  if (!webhookUrl) return res.status(503).json({ error: "Chatbot not configured" });
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (secret) headers["x-api-key"] = secret;
+
+    const r = await fetch(webhookUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(30000),
+    });
+    const data = await r.json();
+    return res.status(r.status).json(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Chatbot unavailable" });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(port, () => {
   console.log(`🚀 Server running at http://localhost:${port}`);

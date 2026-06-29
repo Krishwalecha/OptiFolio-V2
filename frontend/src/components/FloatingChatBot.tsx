@@ -344,7 +344,7 @@ export default function FloatingChatbot() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKey}
+              onKeyDown={handleKey}
               placeholder="Ask anything…"
               disabled={isLoading}
               style={{
