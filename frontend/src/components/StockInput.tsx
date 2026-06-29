@@ -1,17 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   Plus,
   IndianRupee,
   Loader2,
   CheckCircle2,
+  ArrowRight,
   RefreshCw,
   History,
-  ArrowRight,
+  Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import {
+  optimize,
+  OptimizeResult,
+  RiskProfile,
+} from "@/services/optimizerService";
+import ResultsDisplay from "./ResultsDisplay";
 import {
   Dialog,
   DialogContent,
@@ -26,23 +33,112 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTheme } from "@/hooks/useTheme";
-import ResultsDisplay, { OptimizedAllocation } from "./ResultsDisplay";
 
-export interface StockEntry {
-  ticker: string;
-  amount: number;
+const API_BASE = import.meta.env.VITE_API_URL as string;
+const CART_KEY = "portfolioCart_v1";
+
+function readAndClearCart(): string[] {
+  try {
+    const raw = localStorage.getItem(CART_KEY);
+    if (!raw) return [""];
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      localStorage.removeItem(CART_KEY);
+      return parsed.map((t: unknown) => String(t).trim().toUpperCase());
+    }
+  } catch {
+    /* ignore */
+  }
+  return [""];
 }
 
-interface UserProfile {
-  monthlyIncome: number;
-  familyMembers: number;
-  sideIncome: number;
-  age: number;
-  investmentHorizon: string;
-  existingInvestments: number;
-  monthlyExpenses: number;
+// risk profile cards
+const RISK_PROFILES: Array<{
+  value: RiskProfile;
+  label: string;
+  description: string;
+  strategy: string;
+  returnRange: string;
+  border: string;
+  bg: string;
+  color: string;
+}> = [
+  {
+    value: "conservative",
+    label: "Conservative",
+    description: "Capital preservation · lower volatility · stable returns",
+    strategy: "Min Volatility",
+    returnRange: "8–12% p.a.",
+    border: "var(--blue-border)",
+    bg: "var(--blue-subtle)",
+    color: "var(--blue)",
+  },
+  {
+    value: "balanced",
+    label: "Balanced",
+    description: "Equal weight on growth & stability · optimal Sharpe",
+    strategy: "Max Sharpe",
+    returnRange: "12–18% p.a.",
+    border: "var(--green-border)",
+    bg: "var(--green-subtle)",
+    color: "var(--green)",
+  },
+  {
+    value: "aggressive",
+    label: "Aggressive",
+    description: "Maximum return focus · concentrated high-ML positions",
+    strategy: "Aggressive Growth",
+    returnRange: "18–25% p.a.",
+    border: "var(--red-border)",
+    bg: "var(--red-subtle)",
+    color: "var(--red)",
+  },
+];
+
+// auto-mode display metadata — 3 tiers matching backend
+const AUTO_PROFILES: Record<
+  RiskProfile,
+  { label: string; color: string; bg: string; border: string; description: string }
+> = {
+  conservative: {
+    label: "Conservative",
+    color: "var(--blue)",
+    bg: "var(--blue-subtle)",
+    border: "var(--blue-border)",
+    description: "Capital preservation first",
+  },
+  balanced: {
+    label: "Balanced",
+    color: "var(--green)",
+    bg: "var(--green-subtle)",
+    border: "var(--green-border)",
+    description: "Equal focus on growth & stability",
+  },
+  aggressive: {
+    label: "Aggressive",
+    color: "var(--red)",
+    bg: "var(--red-subtle)",
+    border: "var(--red-border)",
+    description: "High risk for substantial returns",
+  },
+};
+
+// normalize old 6-tier saved profiles to current 3 tiers
+function normalizeProfile(profile: string): RiskProfile {
+  if (profile === "conservative" || profile === "moderate") return "conservative";
+  if (profile === "balanced" || profile === "growth") return "balanced";
+  return "aggressive";
 }
+
+const SCORE_ITEMS = [
+  { key: "ageScore", label: "Age factor", range: "−2 to +4" },
+  { key: "savingsScore", label: "Savings rate", range: "−1 to +2" },
+  { key: "familyScore", label: "Family size", range: "−1 to +2" },
+  { key: "horizonScore", label: "Time horizon", range: "0 to +3" },
+  { key: "investmentScore", label: "Investment base", range: "0 to +2" },
+  { key: "ratioScore", label: "Invest. ratio", range: "−1 to +1" },
+];
+
 interface RiskScoreBreakdown {
   ageScore: number;
   savingsScore: number;
@@ -53,18 +149,22 @@ interface RiskScoreBreakdown {
   totalScore: number;
   reasons: string[];
 }
+interface UserProfile {
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  sideIncome: number;
+  age: number;
+  familyMembers: number;
+  existingInvestments: number;
+  investmentHorizon: string;
+}
 interface SavedRiskProfile {
   breakdown: RiskScoreBreakdown;
   profile: string;
   profileData: UserProfile;
-  createdAt: string;
   updatedAt: string;
 }
 
-// ── Cart key (must match FinancialNews.tsx) ────────────────────────────────
-const CART_KEY = "portfolioCart_v1";
-
-// ── All inputs use card/0.6 + blur ──────────────────────────────────────────
 const fieldStyle = (focused: boolean): React.CSSProperties => ({
   width: "100%",
   height: "38px",
@@ -82,7 +182,7 @@ const fieldStyle = (focused: boolean): React.CSSProperties => ({
   boxShadow: focused ? "0 0 0 3px hsl(var(--foreground) / 0.06)" : "none",
 });
 
-const Label: React.FC<{
+const FieldLabel: React.FC<{
   children: React.ReactNode;
   required?: boolean;
   htmlFor?: string;
@@ -106,125 +206,319 @@ const Label: React.FC<{
   </label>
 );
 
-const riskProfiles = [
-  {
-    value: "conservative",
-    label: "Conservative",
-    description: "Low risk, steady growth",
-    border: "var(--blue-border)",
-    bg: "var(--blue-subtle)",
-    color: "var(--blue)",
-  },
-  {
-    value: "moderate",
-    label: "Moderate",
-    description: "Stability-first, modest upside",
-    border: "rgba(20,184,166,0.25)",
-    bg: "rgba(20,184,166,0.07)",
-    color: "#0d9488",
-  },
-  {
-    value: "balanced",
-    label: "Balanced",
-    description: "Equal focus on growth & stability",
-    border: "var(--green-border)",
-    bg: "var(--green-subtle)",
-    color: "var(--green)",
-  },
-  {
-    value: "growth",
-    label: "Growth",
-    description: "Higher returns, moderate risk",
-    border: "var(--amber-border)",
-    bg: "var(--amber-subtle)",
-    color: "var(--amber)",
-  },
-  {
-    value: "aggressive",
-    label: "Aggressive",
-    description: "High risk for substantial returns",
-    border: "rgba(234,88,12,0.2)",
-    bg: "rgba(234,88,12,0.07)",
-    color: "#ea580c",
-  },
-  {
-    value: "very_aggressive",
-    label: "Very Aggressive",
-    description: "Maximum growth, highest risk",
-    border: "var(--red-border)",
-    bg: "var(--red-subtle)",
-    color: "var(--red)",
-  },
-];
-
-const scoreItems = [
-  { key: "ageScore", label: "Age factor", range: "−2 to +3" },
-  { key: "savingsScore", label: "Savings rate", range: "−1 to +2" },
-  { key: "familyScore", label: "Family size", range: "−1 to +2" },
-  { key: "horizonScore", label: "Time horizon", range: "0 to +2" },
-  { key: "investmentScore", label: "Investment base", range: "0 to +2" },
-  { key: "ratioScore", label: "Invest. ratio", range: "−1 to +1" },
-];
-
-// ── Stock row type ─────────────────────────────────────────────────────────
-interface StockRow {
-  ticker: string;
-  isLoading?: boolean;
-  isVerified?: boolean;
+interface StockSuggestion {
+  ticker: string; // bare ticker e.g. "RELIANCE"
+  symbol: string; // with suffix e.g. "RELIANCE.NS"
+  name: string; // full company name
+  exchange: "NSE" | "BSE";
 }
 
-// ── Read cart from localStorage and clear it (one-time on mount) ───────────
-function readAndClearCart(): StockRow[] {
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [{ ticker: "", isLoading: false, isVerified: false }];
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      // Clear immediately so revisiting optimizer starts fresh
-      localStorage.removeItem(CART_KEY);
-      return parsed.map((ticker: unknown) => ({
-        ticker: String(ticker).trim().toUpperCase(),
-        isLoading: false,
-        isVerified: false,
-      }));
+interface StockSearchInputProps {
+  value: string;
+  name: string;
+  onChange: (ticker: string, name: string) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+  slotKey: string;
+}
+
+const StockSearchInput: React.FC<StockSearchInputProps> = ({
+  value,
+  name,
+  onChange,
+  onRemove,
+  canRemove,
+  slotKey,
+}) => {
+  const [inputVal, setInputVal] = useState(value);
+  const [suggestions, setSuggestions] = useState<StockSuggestion[]>([]);
+  const [showDrop, setShowDrop] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      )
+        setShowDrop(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Sync if parent changes value externally (e.g. cart load)
+  useEffect(() => {
+    setInputVal(value);
+  }, [value]);
+
+  const search = useCallback(async (q: string) => {
+    if (!q || q.length < 1) {
+      setSuggestions([]);
+      setShowDrop(false);
+      return;
     }
-  } catch {
-    // ignore parse errors
-  }
-  return [{ ticker: "", isLoading: false, isVerified: false }];
-}
+    setSearching(true);
+    try {
+      const r = await fetch(
+        `${API_BASE}/api/searchStocks?q=${encodeURIComponent(q)}`,
+      );
+      const d = await r.json();
+      setSuggestions(d.results ?? []);
+      setShowDrop((d.results ?? []).length > 0);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
 
-const API_BASE = import.meta.env.VITE_API_URL;
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value.toUpperCase();
+    setInputVal(v);
+    onChange(v, ""); // keep parent in sync while typing
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(v), 280);
+  };
+
+  const handleSelect = (s: StockSuggestion) => {
+    setInputVal(s.ticker);
+    onChange(s.ticker, s.name);
+    setSuggestions([]);
+    setShowDrop(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") setShowDrop(false);
+  };
+
+  const borderColor = focused
+    ? "hsl(var(--foreground) / 0.35)"
+    : "hsl(var(--border))";
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", flex: 1 }}>
+      {/* Input row */}
+      <div
+        style={{ position: "relative", display: "flex", alignItems: "center" }}
+      >
+        <Search
+          size={13}
+          style={{
+            position: "absolute",
+            left: "10px",
+            color: "hsl(var(--muted-foreground))",
+            pointerEvents: "none",
+            flexShrink: 0,
+          }}
+        />
+        <input
+          id={slotKey}
+          type="text"
+          autoComplete="off"
+          placeholder="Search stock — name or ticker"
+          value={inputVal}
+          onChange={handleInput}
+          onFocus={() => {
+            setFocused(true);
+            if (suggestions.length) setShowDrop(true);
+          }}
+          onBlur={() => setFocused(false)}
+          onKeyDown={handleKeyDown}
+          style={{
+            width: "100%",
+            height: "38px",
+            paddingLeft: "30px",
+            paddingRight: searching ? "30px" : "10px",
+            background: "hsl(var(--card) / 0.6)",
+            backdropFilter: "blur(8px)",
+            border: `1px solid ${borderColor}`,
+            borderRadius: showDrop ? "7px 7px 0 0" : "7px",
+            fontSize: "13.5px",
+            fontFamily: "'JetBrains Mono', monospace",
+            letterSpacing: "0.03em",
+            color: "hsl(var(--foreground))",
+            outline: "none",
+            transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+            boxShadow: focused
+              ? "0 0 0 3px hsl(var(--foreground) / 0.06)"
+              : "none",
+          }}
+        />
+        {searching && (
+          <Loader2
+            size={11}
+            style={{
+              position: "absolute",
+              right: "10px",
+              color: "hsl(var(--muted-foreground))",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+        )}
+      </div>
+
+      {/* Company name tag shown after a selection */}
+      {name && !showDrop && (
+        <div style={{ marginTop: "3px", paddingLeft: "30px" }}>
+          <span
+            style={{
+              fontSize: "11px",
+              color: "hsl(var(--muted-foreground))",
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 300,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {name}
+          </span>
+        </div>
+      )}
+
+      {/* Dropdown */}
+      {showDrop && suggestions.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            zIndex: 50,
+            background: "hsl(var(--card) / 0.97)",
+            backdropFilter: "blur(12px)",
+            border: `1px solid ${borderColor}`,
+            borderTop: "none",
+            borderRadius: "0 0 7px 7px",
+            boxShadow: "0 8px 24px hsl(var(--foreground) / 0.08)",
+            overflow: "hidden",
+          }}
+        >
+          {suggestions.map((s, i) => (
+            <button
+              key={s.symbol}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleSelect(s);
+              }}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "10px",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                borderTop:
+                  i > 0 ? "1px solid hsl(var(--border) / 0.5)" : "none",
+                textAlign: "left",
+                transition: "background 0.1s ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background =
+                  "hsl(var(--secondary) / 0.7)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background =
+                  "transparent";
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "hsl(var(--foreground))",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {s.ticker}
+                </span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "hsl(var(--muted-foreground))",
+                    fontWeight: 300,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                >
+                  {s.name}
+                </span>
+              </div>
+              <span
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: "10px",
+                  letterSpacing: "0.05em",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  background:
+                    s.exchange === "NSE"
+                      ? "var(--blue-subtle)"
+                      : "hsl(var(--muted) / 0.5)",
+                  color:
+                    s.exchange === "NSE"
+                      ? "var(--blue)"
+                      : "hsl(var(--muted-foreground))",
+                  flexShrink: 0,
+                  border:
+                    s.exchange === "NSE"
+                      ? "1px solid var(--blue-border)"
+                      : "1px solid hsl(var(--border))",
+                }}
+              >
+                {s.exchange}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const StockInput: React.FC = () => {
   const { toast } = useToast();
-  const { theme } = useTheme();
   const { isLoggedIn, userId } = useAuth();
 
-  // ── Pre-fill from cart OR start with one empty row ──────────────────────
-  const [stocks, setStocks] = useState<StockRow[]>(readAndClearCart);
-
+  // state
+  const [tickers, setTickers] = useState<string[]>(readAndClearCart);
+  const [tickerNames, setTickerNames] = useState<Record<number, string>>({});
   const [totalAmount, setTotalAmount] = useState(0);
-  const [submittedStocks, setSubmittedStocks] = useState<StockEntry[] | null>(
-    null,
-  );
-  const [optimizedAllocation, setOptimizedAllocation] = useState<
-    OptimizedAllocation[] | null
-  >(null);
-  const [riskMetric, setRiskMetric] = useState(0.25);
-  const [expectedReturn, setExpectedReturn] = useState(8.4);
   const [isLoading, setIsLoading] = useState(false);
-  const [sentTickers, setSentTickers] = useState<Set<string>>(new Set());
-  const [profileMode, setProfileMode] = useState<"auto" | "manual">("manual");
-  const [selectedRiskProfile, setSelectedRiskProfile] = useState("balanced");
+  const [deepMode, setDeepMode] = useState(false);
+  const [result, setResult] = useState<OptimizeResult | null>(null);
+  const [focused, setFocused] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  const [profileMode, setProfileMode] = useState<"manual" | "auto">("manual");
+  const [manualRisk, setManualRisk] = useState<RiskProfile>("balanced");
+
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    monthlyIncome: null as any,
-    familyMembers: null as any,
-    sideIncome: null as any,
-    age: null as any,
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+    sideIncome: 0,
+    age: 0,
+    familyMembers: 1,
+    existingInvestments: 0,
     investmentHorizon: "medium",
-    existingInvestments: null as any,
-    monthlyExpenses: null as any,
   });
   const [showRiskDialog, setShowRiskDialog] = useState(false);
   const [dialogStage, setDialogStage] = useState<"analyzing" | "results">(
@@ -232,25 +526,23 @@ const StockInput: React.FC = () => {
   );
   const [riskScoreBreakdown, setRiskScoreBreakdown] =
     useState<RiskScoreBreakdown | null>(null);
-  const [selectedProfileFromAuto, setSelectedProfileFromAuto] = useState("");
+  const [autoProfile, setAutoProfile] = useState("");
   const [savedProfile, setSavedProfile] = useState<SavedRiskProfile | null>(
     null,
   );
-  const [hasLoadedSavedProfile, setHasLoadedSavedProfile] = useState(false);
-  const [isLoadingSavedProfile, setIsLoadingSavedProfile] = useState(false);
-  const [showSavedProfileAlert, setShowSavedProfileAlert] = useState(false);
-  const [acceptedSavedProfile, setAcceptedSavedProfile] = useState(false);
-  const [focused, setFocused] = useState<string | null>(null);
+  const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [showSavedAlert, setShowSavedAlert] = useState(false);
+  const [acceptedSaved, setAcceptedSaved] = useState(false);
 
   useEffect(() => {
-    if (
-      isLoggedIn &&
-      userId &&
-      profileMode === "auto" &&
-      !hasLoadedSavedProfile
-    )
-      loadSavedRiskProfile();
-  }, [isLoggedIn, userId, profileMode, hasLoadedSavedProfile]);
+    if (!isLoading) {
+      setElapsed(0);
+      return;
+    }
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [isLoading]);
 
   useEffect(() => {
     if (showRiskDialog && dialogStage === "results") {
@@ -259,62 +551,69 @@ const StockInput: React.FC = () => {
     }
   }, [showRiskDialog, dialogStage]);
 
-  const loadSavedRiskProfile = async () => {
-    setIsLoadingSavedProfile(true);
+  useEffect(() => {
+    if (isLoggedIn && userId && profileMode === "auto" && !hasLoadedSaved)
+      loadSavedProfile();
+  }, [isLoggedIn, userId, profileMode, hasLoadedSaved]);
+
+  const loadSavedProfile = async () => {
+    setIsLoadingSaved(true);
     try {
       const res = await fetch(`${API_BASE}/api/userRiskProfile/${userId}`);
       if (res.ok) {
-        const data: SavedRiskProfile = await res.json();
+        const raw: SavedRiskProfile = await res.json();
+        const data = { ...raw, profile: normalizeProfile(raw.profile) };
         setSavedProfile(data);
-        setHasLoadedSavedProfile(true);
-        setShowSavedProfileAlert(true);
+        setHasLoadedSaved(true);
+        setShowSavedAlert(true);
         setUserProfile(data.profileData);
         setRiskScoreBreakdown(data.breakdown);
-        setSelectedProfileFromAuto(data.profile);
+        setAutoProfile(data.profile);
         toast({
-          title: "Profile found",
-          description: `Previous risk profile: ${riskProfiles.find((p) => p.value === data.profile)?.label}`,
+          title: "Saved profile found",
+          description: `Previous: ${AUTO_PROFILES[data.profile as RiskProfile].label}`,
         });
-      } else if (res.status === 404) {
-        setHasLoadedSavedProfile(true);
-      } else throw new Error();
+      } else {
+        setHasLoadedSaved(true);
+      }
     } catch {
-      setHasLoadedSavedProfile(true);
+      setHasLoadedSaved(true);
     } finally {
-      setIsLoadingSavedProfile(false);
+      setIsLoadingSaved(false);
     }
   };
 
-  const saveRiskProfileToDatabase = async (
+  const saveProfileToDb = async (
     breakdown: RiskScoreBreakdown,
     profile: string,
     profileData: UserProfile,
   ) => {
     try {
-      const res = await fetch(`${API_BASE}/api/saveRiskProfile`, {
+      await fetch(`${API_BASE}/api/saveRiskProfile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, breakdown, profile, profileData }),
       });
-      if (res.ok) {
-        const r = await res.json();
-        if (r.isUpdate) toast({ title: "Profile updated" });
-      }
-    } catch {}
+    } catch {
+      /* non-blocking */
+    }
   };
 
-  const calculateAutoRiskProfile = (): {
+  const calculateAutoProfile = (): {
     profile: string;
     breakdown: RiskScoreBreakdown;
   } => {
     let score = 0;
     const reasons: string[] = [];
-    const age = userProfile.age ?? 30,
-      monthlyIncome = userProfile.monthlyIncome ?? 0,
-      monthlyExpenses = userProfile.monthlyExpenses ?? 0,
-      sideIncome = userProfile.sideIncome ?? 0,
-      familyMembers = userProfile.familyMembers ?? 1,
-      existingInvestments = userProfile.existingInvestments ?? 0;
+    const {
+      age,
+      monthlyIncome,
+      monthlyExpenses,
+      sideIncome,
+      familyMembers,
+      existingInvestments,
+      investmentHorizon,
+    } = userProfile;
 
     let ageScore = 0;
     if (age < 25) {
@@ -343,14 +642,14 @@ const StockInput: React.FC = () => {
     const totalIncome = monthlyIncome + sideIncome;
     const savingsRate =
       totalIncome > 0 ? (totalIncome - monthlyExpenses) / totalIncome : 0;
-    const absoluteSavings = totalIncome - monthlyExpenses;
+    const surplus = totalIncome - monthlyExpenses;
     let savingsScore = 0;
-    if (savingsRate > 0.4 && absoluteSavings >= 15000) {
+    if (savingsRate > 0.4 && surplus >= 15000) {
       savingsScore = 2;
       reasons.push(
         `High savings rate (${(savingsRate * 100).toFixed(1)}%) + strong surplus (+2)`,
       );
-    } else if (savingsRate > 0.25 && absoluteSavings >= 10000) {
+    } else if (savingsRate > 0.25 && surplus >= 10000) {
       savingsScore = 1;
       reasons.push(
         `Good savings rate (${(savingsRate * 100).toFixed(1)}%) supports growth (+1)`,
@@ -381,13 +680,13 @@ const StockInput: React.FC = () => {
     score += familyScore;
 
     let horizonScore = 0;
-    if (userProfile.investmentHorizon === "very_long") {
+    if (investmentHorizon === "very_long") {
       horizonScore = 3;
       reasons.push(`Very long-term horizon — max equity exposure (+3)`);
-    } else if (userProfile.investmentHorizon === "long") {
+    } else if (investmentHorizon === "long") {
       horizonScore = 2;
       reasons.push(`Long-term horizon (+2)`);
-    } else if (userProfile.investmentHorizon === "medium") {
+    } else if (investmentHorizon === "medium") {
       horizonScore = 1;
       reasons.push(`Medium-term horizon (+1)`);
     } else {
@@ -409,7 +708,8 @@ const StockInput: React.FC = () => {
     }
     score += investmentScore;
 
-    const ratio = totalAmount / (totalIncome * 12 || 1);
+    const ratio =
+      totalAmount > 0 && totalIncome > 0 ? totalAmount / (totalIncome * 12) : 0;
     let ratioScore = 0;
     if (ratio < 0.1) {
       ratioScore = 1;
@@ -423,18 +723,9 @@ const StockInput: React.FC = () => {
     }
     score += ratioScore;
 
-    const profile =
-      score >= 16
-        ? "very_aggressive"
-        : score >= 11
-          ? "aggressive"
-          : score >= 6
-            ? "growth"
-            : score >= 2
-              ? "balanced"
-              : score >= -1
-                ? "moderate"
-                : "conservative";
+    // score range: −5 (very conservative) to +14 (very aggressive)
+    const profile: RiskProfile =
+      score >= 9 ? "aggressive" : score >= 2 ? "balanced" : "conservative";
 
     return {
       profile,
@@ -451,260 +742,120 @@ const StockInput: React.FC = () => {
     };
   };
 
-  const handleTickerChange = (index: number, value: string) => {
-    const ns = [...stocks];
-    ns[index] = {
-      ...ns[index],
-      ticker: value.toUpperCase(),
-      isVerified: false,
-    };
-    setStocks(ns);
+  const handleTickerChange = (index: number, ticker: string, name: string) => {
+    const ns = [...tickers];
+    ns[index] = ticker.toUpperCase();
+    setTickers(ns);
+    setTickerNames((prev) => ({ ...prev, [index]: name }));
   };
-
-  const sendToBackend = async (ticker: string, index: number) => {
-    const t = ticker.trim().toUpperCase();
-    if (sentTickers.has(t)) return true;
-    setStocks((prev) => {
-      const ns = [...prev];
-      ns[index] = { ...ns[index], isLoading: true };
-      return ns;
-    });
-    try {
-      const res = await fetch(`${API_BASE}/api/updateStock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: t }),
-      });
-      const text = await res.text();
-      let result;
-      try {
-        result = JSON.parse(text);
-      } catch {
-        throw new Error("Invalid response");
-      }
-      if (res.ok && result.data?.length > 0) {
-        setSentTickers((prev) => new Set(prev).add(t));
-        setStocks((prev) => {
-          const ns = [...prev];
-          ns[index] = { ...ns[index], isLoading: false, isVerified: true };
-          return ns;
+  const addTicker = () => setTickers((p) => [...p, ""]);
+  const removeTicker = (i: number) => {
+    if (tickers.length > 1) {
+      setTickers(tickers.filter((_, idx) => idx !== i));
+      setTickerNames((prev) => {
+        const next: Record<number, string> = {};
+        Object.entries(prev).forEach(([k, v]) => {
+          const ki = Number(k);
+          if (ki < i) next[ki] = v;
+          else if (ki > i) next[ki - 1] = v;
         });
-        toast({
-          title: "Stock verified",
-          description: `${t} added successfully.`,
-        });
-        return true;
-      }
-      setStocks((prev) => {
-        const ns = [...prev];
-        ns[index] = { ...ns[index], isLoading: false, isVerified: false };
-        return ns;
+        return next;
       });
-      toast({
-        title: "Invalid ticker",
-        description: `${t} has no market data.`,
-        variant: "destructive",
-      });
-      return false;
-    } catch {
-      setStocks((prev) => {
-        const ns = [...prev];
-        ns[index] = { ...ns[index], isLoading: false, isVerified: false };
-        return ns;
-      });
-      toast({
-        title: "Connection error",
-        description: "Could not connect to server.",
-        variant: "destructive",
-      });
-      return false;
     }
   };
 
-  const addStockField = (e?: React.MouseEvent) => {
-    e?.preventDefault();
-    setStocks((prev) => [
-      ...prev,
-      { ticker: "", isLoading: false, isVerified: false },
-    ]);
-  };
-
-  const removeStockField = (index: number, e?: React.MouseEvent) => {
-    e?.preventDefault();
-    if (stocks.length === 1) return;
-    setStocks(stocks.filter((_, i) => i !== index));
-  };
-
-  const fetchOptimizationResults = async (currentUserId: string) => {
-    const res = await fetch(`${API_BASE}/api/optimizationResults`);
-    if (!res.ok) throw new Error("Failed");
-    const data = await res.json();
-    const alloc = data.allocation as Record<string, number>;
-    const total = Object.values(alloc).reduce((s: number, v: any) => s + v, 0);
-    const mapped: OptimizedAllocation[] = Object.entries(alloc).map(
-      ([ticker, amount]: [string, any]) => ({
-        ticker,
-        amount,
-        percentage: (amount / total) * 100,
-      }),
-    );
-    setOptimizedAllocation(mapped);
-    setRiskMetric(data.portfolio_metrics.annualized_risk);
-    setExpectedReturn(data.portfolio_metrics.expected_annual_return);
-    setSubmittedStocks(
-      Object.entries(alloc).map(([ticker, amount]: [string, any]) => ({
-        ticker,
-        amount,
-      })),
-    );
-    try {
-      await fetch(`${API_BASE}/api/saveAllocations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: currentUserId,
-          allocations: mapped.map(({ ticker, percentage }) => ({
-            ticker,
-            percentage,
-          })),
-        }),
-      });
-    } catch {
-      console.warn("Could not save allocations");
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent | React.MouseEvent) => {
-    e.preventDefault();
-    const storedUserId = localStorage.getItem("userId");
-    const currentUserId = userId || storedUserId;
-    if (!isLoggedIn || !currentUserId) {
-      toast({
+  const handleSubmit = async () => {
+    const uid = userId || localStorage.getItem("userId");
+    if (!isLoggedIn || !uid)
+      return toast({
         title: "Sign in required",
         description: "Please sign in to optimize.",
         variant: "destructive",
       });
-      return;
-    }
-    if (stocks.some((s) => !s.ticker)) {
-      toast({
-        title: "Missing tickers",
-        description: "Fill in all stock tickers.",
+
+    const clean = tickers.map((t) => t.trim()).filter(Boolean);
+    if (clean.length < 2)
+      return toast({
+        title: "Need at least 2 tickers",
+        description: "Add more stocks.",
         variant: "destructive",
       });
-      return;
-    }
-    if (totalAmount <= 0) {
-      toast({
+    if (totalAmount <= 0)
+      return toast({
         title: "Invalid amount",
         description: "Enter a valid investment amount.",
         variant: "destructive",
       });
-      return;
-    }
-    if (profileMode === "auto" && !acceptedSavedProfile) {
-      const p = userProfile;
-      if (
-        !p.monthlyIncome ||
-        p.monthlyIncome <= 0 ||
-        p.monthlyExpenses == null ||
-        p.monthlyExpenses < 0 ||
-        !p.age ||
-        p.age <= 0 ||
-        !p.familyMembers ||
-        p.familyMembers <= 0
-      ) {
-        toast({
+
+    // Validate auto profile fields
+    if (profileMode === "auto" && !acceptedSaved) {
+      const { monthlyIncome, age, familyMembers, monthlyExpenses } =
+        userProfile;
+      if (!monthlyIncome || !age || !familyMembers || monthlyExpenses == null)
+        return toast({
           title: "Incomplete profile",
           description: "Fill in all required fields.",
           variant: "destructive",
         });
-        return;
-      }
     }
+
     setIsLoading(true);
+    setResult(null);
+
     try {
-      for (let i = 0; i < stocks.length; i++) {
-        if (stocks[i].ticker && !stocks[i].isVerified) {
-          const ok = await sendToBackend(stocks[i].ticker, i);
-          if (!ok) {
-            setIsLoading(false);
-            return;
-          }
-        }
-      }
-      setSubmittedStocks(
-        stocks.map((s) => ({
-          ticker: s.ticker,
-          amount: totalAmount / stocks.length,
-        })),
-      );
-      let finalProfile: string;
+      let finalProfile: RiskProfile;
       let breakdown: RiskScoreBreakdown | null = null;
+
       if (profileMode === "auto") {
-        if (acceptedSavedProfile && savedProfile) {
-          finalProfile = savedProfile.profile;
+        if (acceptedSaved && savedProfile) {
+          finalProfile = normalizeProfile(savedProfile.profile);
           breakdown = savedProfile.breakdown;
-          setRiskScoreBreakdown(breakdown);
-          setSelectedProfileFromAuto(finalProfile);
-        } else if (
-          savedProfile &&
-          showSavedProfileAlert &&
-          !acceptedSavedProfile
-        ) {
-          toast({
-            title: "Confirm profile",
-            description: "Choose 'Continue' or 'Recalculate'.",
-            variant: "destructive",
-          });
-          setIsLoading(false);
-          return;
         } else {
           setShowRiskDialog(true);
           setDialogStage("analyzing");
-          await new Promise((r) => setTimeout(r, 2000));
-          const result = calculateAutoRiskProfile();
-          finalProfile = result.profile;
-          breakdown = result.breakdown;
+          await new Promise((r) => setTimeout(r, 1800));
+          const calc = calculateAutoProfile();
+          finalProfile = calc.profile;
+          breakdown = calc.breakdown;
           setRiskScoreBreakdown(breakdown);
-          setSelectedProfileFromAuto(finalProfile);
-          await saveRiskProfileToDatabase(breakdown, finalProfile, userProfile);
+          setAutoProfile(finalProfile);
           setDialogStage("results");
+          saveProfileToDb(breakdown, finalProfile, userProfile);
         }
       } else {
-        finalProfile = selectedRiskProfile;
+        finalProfile = manualRisk;
       }
-      const storeRes = await fetch(`${API_BASE}/api/storeUserRequest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stocks: stocks.map((s) => ({ ticker: s.ticker })),
-          totalAmount,
-          riskProfile: finalProfile,
-          userId: currentUserId,
-        }),
+
+      const res = await optimize({
+        tickers: clean,
+        investment: totalAmount,
+        risk: finalProfile,
+        userId: uid,
+        deepMode,
       });
-      if (!storeRes.ok) throw new Error("Store failed");
-      const runRes = await fetch(`${API_BASE}/api/runOptimizer`, {
-        method: "POST",
-      });
-      if (!runRes.ok) throw new Error("Optimizer failed");
-      await fetchOptimizationResults(currentUserId);
+      setResult(res);
+
+      const profMeta = AUTO_PROFILES[finalProfile];
       toast({
-        title: "Portfolio optimized",
-        description: `${stocks.length} stocks · ${riskProfiles.find((p) => p.value === finalProfile)?.label} profile`,
+        title: "Portfolio optimized ✓",
+        description: `${res.allocation.length} stocks · ${profMeta.label}`,
       });
-      setAcceptedSavedProfile(false);
-    } catch {
+      setAcceptedSaved(false);
+    } catch (err: any) {
       toast({
         title: "Optimization failed",
-        description: "Something went wrong. Please try again.",
+        description: err.message ?? "Something went wrong.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
+
+  const canSubmit = isLoggedIn && (userId || localStorage.getItem("userId"));
+
+  const autoMeta = autoProfile ? AUTO_PROFILES[autoProfile as RiskProfile] : null;
+  const savedMeta = savedProfile ? AUTO_PROFILES[savedProfile.profile as RiskProfile] : null;
 
   return (
     <>
@@ -714,10 +865,10 @@ const StockInput: React.FC = () => {
       <Dialog open={showRiskDialog} onOpenChange={setShowRiskDialog}>
         <DialogContent
           style={{
-            maxWidth: "680px",
-            maxHeight: "90vh",
+            maxWidth: "640px",
+            maxHeight: "88vh",
             overflowY: "auto",
-            background: "hsl(var(--card) / 0.85)",
+            background: "hsl(var(--card) / 0.9)",
             backdropFilter: "blur(16px)",
             border: "1px solid hsl(var(--border))",
             borderRadius: "12px",
@@ -727,17 +878,16 @@ const StockInput: React.FC = () => {
           <DialogHeader style={{ marginBottom: "24px" }}>
             <DialogTitle
               style={{
-                fontSize: "18px",
+                fontSize: "17px",
                 fontWeight: 600,
                 letterSpacing: "-0.02em",
-                color: "hsl(var(--foreground))",
               }}
             >
               Risk profile analysis
             </DialogTitle>
             <DialogDescription
               style={{
-                fontSize: "13.5px",
+                fontSize: "13px",
                 color: "hsl(var(--muted-foreground))",
                 fontWeight: 300,
               }}
@@ -747,6 +897,7 @@ const StockInput: React.FC = () => {
                 : "Your personalized risk profile recommendation"}
             </DialogDescription>
           </DialogHeader>
+
           {dialogStage === "analyzing" ? (
             <motion.div
               initial={{ opacity: 0 }}
@@ -755,12 +906,12 @@ const StockInput: React.FC = () => {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                padding: "40px 24px",
-                gap: "16px",
+                padding: "40px 0",
+                gap: "14px",
               }}
             >
               <Loader2
-                size={32}
+                size={28}
                 style={{
                   color: "hsl(var(--muted-foreground))",
                   animation: "spin 0.8s linear infinite",
@@ -768,7 +919,7 @@ const StockInput: React.FC = () => {
               />
               <p
                 style={{
-                  fontSize: "15px",
+                  fontSize: "14px",
                   fontWeight: 500,
                   color: "hsl(var(--foreground))",
                 }}
@@ -782,248 +933,236 @@ const StockInput: React.FC = () => {
                   fontWeight: 300,
                 }}
               >
-                Calculating optimal risk strategy
+                Computing optimal risk strategy
               </p>
             </motion.div>
-          ) : (
+          ) : riskScoreBreakdown && autoMeta ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              style={{ display: "flex", flexDirection: "column", gap: "24px" }}
+              style={{ display: "flex", flexDirection: "column", gap: "22px" }}
             >
-              {riskScoreBreakdown && (
-                <>
-                  <div>
-                    <p className="mono-label" style={{ marginBottom: "14px" }}>
-                      Score breakdown
-                    </p>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, 1fr)",
-                        gap: "8px",
-                      }}
-                    >
-                      {scoreItems.map((item) => {
-                        const score =
-                          (riskScoreBreakdown as any)[item.key] || 0;
-                        return (
-                          <div
-                            key={item.key}
-                            style={{
-                              padding: "14px",
-                              background: "hsl(var(--secondary) / 0.6)",
-                              backdropFilter: "blur(8px)",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: "11px",
-                                color: "hsl(var(--muted-foreground))",
-                                fontFamily: "'JetBrains Mono', monospace",
-                                letterSpacing: "0.04em",
-                                textTransform: "uppercase",
-                                marginBottom: "8px",
-                              }}
-                            >
-                              {item.label}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "24px",
-                                fontWeight: 600,
-                                letterSpacing: "-0.02em",
-                                color:
-                                  score > 0
-                                    ? "var(--green)"
-                                    : score < 0
-                                      ? "var(--red)"
-                                      : "hsl(var(--muted-foreground))",
-                                lineHeight: 1,
-                              }}
-                            >
-                              {score > 0 ? "+" : ""}
-                              {score}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "hsl(var(--muted-foreground))",
-                                marginTop: "4px",
-                                fontFamily: "'JetBrains Mono', monospace",
-                              }}
-                            >
-                              {item.range}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {selectedProfileFromAuto &&
-                    (() => {
-                      const prof = riskProfiles.find(
-                        (p) => p.value === selectedProfileFromAuto,
-                      );
-                      return (
+              {/* Score grid */}
+              <div>
+                <p className="mono-label" style={{ marginBottom: "12px" }}>
+                  Score breakdown
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: "8px",
+                  }}
+                >
+                  {SCORE_ITEMS.map((item) => {
+                    const s = (riskScoreBreakdown as any)[item.key] ?? 0;
+                    return (
+                      <div
+                        key={item.key}
+                        style={{
+                          padding: "14px",
+                          background: "hsl(var(--secondary) / 0.6)",
+                          backdropFilter: "blur(8px)",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      >
                         <div
                           style={{
-                            padding: "20px 24px",
-                            background: prof?.bg,
-                            border: `1px solid ${prof?.border}`,
-                            borderRadius: "8px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "20px",
+                            fontSize: "10px",
+                            color: "hsl(var(--muted-foreground))",
+                            fontFamily: "'JetBrains Mono', monospace",
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            marginBottom: "6px",
                           }}
                         >
-                          <div
-                            style={{ textAlign: "center", minWidth: "64px" }}
-                          >
-                            <div
-                              style={{
-                                fontFamily: "'JetBrains Mono', monospace",
-                                fontSize: "10px",
-                                letterSpacing: "0.06em",
-                                textTransform: "uppercase",
-                                color: "hsl(var(--muted-foreground))",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              Score
-                            </div>
-                            <div
-                              style={{
-                                fontFamily:
-                                  "'Instrument Serif', Georgia, serif",
-                                fontSize: "2.5rem",
-                                lineHeight: 1,
-                                letterSpacing: "-0.04em",
-                                color: prof?.color,
-                              }}
-                            >
-                              {riskScoreBreakdown.totalScore}
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              width: "1px",
-                              height: "48px",
-                              background: prof?.border,
-                            }}
-                          />
-                          <div>
-                            <div
-                              style={{
-                                fontFamily: "'JetBrains Mono', monospace",
-                                fontSize: "10px",
-                                letterSpacing: "0.06em",
-                                textTransform: "uppercase",
-                                color: "hsl(var(--muted-foreground))",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              Recommended profile
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "18px",
-                                fontWeight: 600,
-                                letterSpacing: "-0.02em",
-                                color: prof?.color,
-                                marginBottom: "2px",
-                              }}
-                            >
-                              {prof?.label}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "13px",
-                                color: "hsl(var(--muted-foreground))",
-                                fontWeight: 300,
-                              }}
-                            >
-                              {prof?.description}
-                            </div>
-                          </div>
-                          <div style={{ marginLeft: "auto" }}>
-                            <CheckCircle2
-                              size={20}
-                              style={{ color: prof?.color }}
-                            />
-                          </div>
+                          {item.label}
                         </div>
-                      );
-                    })()}
-                  <div>
-                    <p className="mono-label" style={{ marginBottom: "12px" }}>
-                      Analysis details
-                    </p>
+                        <div
+                          style={{
+                            fontSize: "22px",
+                            fontWeight: 600,
+                            letterSpacing: "-0.02em",
+                            color:
+                              s > 0
+                                ? "var(--green)"
+                                : s < 0
+                                  ? "var(--red)"
+                                  : "hsl(var(--muted-foreground))",
+                            lineHeight: 1,
+                          }}
+                        >
+                          {s > 0 ? "+" : ""}
+                          {s}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "hsl(var(--muted-foreground))",
+                            marginTop: "3px",
+                            fontFamily: "'JetBrains Mono', monospace",
+                          }}
+                        >
+                          {item.range}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Recommended profile card */}
+              <div
+                style={{
+                  padding: "18px 22px",
+                  background: autoMeta.bg,
+                  border: `1px solid ${autoMeta.border}`,
+                  borderRadius: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "18px",
+                }}
+              >
+                <div style={{ textAlign: "center", minWidth: "60px" }}>
+                  <div
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "10px",
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "hsl(var(--muted-foreground))",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Score
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "'Instrument Serif', Georgia, serif",
+                      fontSize: "2.2rem",
+                      lineHeight: 1,
+                      letterSpacing: "-0.04em",
+                      color: autoMeta.color,
+                    }}
+                  >
+                    {riskScoreBreakdown.totalScore}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    width: "1px",
+                    height: "44px",
+                    background: autoMeta.border,
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "10px",
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "hsl(var(--muted-foreground))",
+                      marginBottom: "3px",
+                    }}
+                  >
+                    Recommended
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 600,
+                      letterSpacing: "-0.02em",
+                      color: autoMeta.color,
+                      marginBottom: "2px",
+                    }}
+                  >
+                    {autoMeta.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "hsl(var(--muted-foreground))",
+                      fontWeight: 300,
+                    }}
+                  >
+                    {autoMeta.description}
+                  </div>
+                </div>
+                <CheckCircle2
+                  size={18}
+                  style={{ color: autoMeta.color, flexShrink: 0 }}
+                />
+              </div>
+
+              {/* Reasons list */}
+              <div>
+                <p className="mono-label" style={{ marginBottom: "10px" }}>
+                  Analysis details
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "5px",
+                  }}
+                >
+                  {riskScoreBreakdown.reasons.map((r, i) => (
                     <div
+                      key={i}
                       style={{
                         display: "flex",
-                        flexDirection: "column",
-                        gap: "6px",
+                        alignItems: "flex-start",
+                        gap: "8px",
+                        padding: "9px 12px",
+                        background: "hsl(var(--secondary) / 0.5)",
+                        backdropFilter: "blur(8px)",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "7px",
                       }}
                     >
-                      {riskScoreBreakdown.reasons.map((reason, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            gap: "10px",
-                            padding: "10px 14px",
-                            background: "hsl(var(--secondary) / 0.5)",
-                            backdropFilter: "blur(8px)",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "7px",
-                          }}
-                        >
-                          <CheckCircle2
-                            size={12}
-                            style={{
-                              color: "hsl(var(--muted-foreground))",
-                              flexShrink: 0,
-                              marginTop: "2px",
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontSize: "13px",
-                              color: "hsl(var(--foreground))",
-                              lineHeight: 1.55,
-                              fontWeight: 300,
-                            }}
-                          >
-                            {reason}
-                          </span>
-                        </div>
-                      ))}
+                      <CheckCircle2
+                        size={11}
+                        style={{
+                          color: "hsl(var(--muted-foreground))",
+                          flexShrink: 0,
+                          marginTop: "2px",
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: "12.5px",
+                          color: "hsl(var(--foreground))",
+                          lineHeight: 1.55,
+                          fontWeight: 300,
+                        }}
+                      >
+                        {r}
+                      </span>
                     </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <span
-                      style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: "10px",
-                        color: "hsl(var(--muted-foreground))",
-                        letterSpacing: "0.04em",
-                      }}
-                    >
-                      Auto-closes in 15s
-                    </span>
-                  </div>
-                </>
-              )}
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ textAlign: "right" }}>
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: "10px",
+                    color: "hsl(var(--muted-foreground))",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Auto-closes in 15s
+                </span>
+              </div>
             </motion.div>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
 
-      {/* ── Main Form ── */}
+      {/* ── Main form ── */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1038,7 +1177,7 @@ const StockInput: React.FC = () => {
             overflow: "hidden",
           }}
         >
-          {/* Form header */}
+          {/* Header */}
           <div
             style={{
               padding: "24px 28px",
@@ -1075,6 +1214,8 @@ const StockInput: React.FC = () => {
               <p className="mono-label" style={{ marginBottom: "16px" }}>
                 Risk profile
               </p>
+
+              {/* Mode toggle */}
               <div
                 style={{
                   display: "flex",
@@ -1087,14 +1228,16 @@ const StockInput: React.FC = () => {
                   width: "fit-content",
                 }}
               >
-                {[
-                  { key: "manual", label: "Manual" },
-                  { key: "auto", label: "Smart AI" },
-                ].map(({ key, label }) => (
+                {(
+                  [
+                    ["manual", "Manual"],
+                    ["auto", "Smart AI"],
+                  ] as const
+                ).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setProfileMode(key as "auto" | "manual")}
+                    onClick={() => setProfileMode(key)}
                     style={{
                       padding: "6px 16px",
                       borderRadius: "6px",
@@ -1124,6 +1267,7 @@ const StockInput: React.FC = () => {
                 ))}
               </div>
 
+              {/* Manual mode — 3 profile cards */}
               {profileMode === "manual" && (
                 <div
                   style={{
@@ -1132,30 +1276,25 @@ const StockInput: React.FC = () => {
                     gap: "8px",
                   }}
                 >
-                  {riskProfiles.map((profile) => {
-                    const isSelected = selectedRiskProfile === profile.value;
+                  {RISK_PROFILES.map((profile) => {
+                    const sel = manualRisk === profile.value;
                     return (
                       <motion.button
                         key={profile.value}
                         type="button"
                         whileTap={{ scale: 0.98 }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setSelectedRiskProfile(profile.value);
-                        }}
+                        onClick={() => setManualRisk(profile.value)}
                         style={{
-                          padding: "14px",
+                          padding: "16px",
                           borderRadius: "8px",
                           textAlign: "left",
                           cursor: "pointer",
-                          background: isSelected
+                          background: sel
                             ? profile.bg
                             : "hsl(var(--card) / 0.4)",
                           backdropFilter: "blur(8px)",
-                          border: `1px solid ${isSelected ? profile.border : "hsl(var(--border))"}`,
-                          outline: isSelected
-                            ? `3px solid ${profile.border}`
-                            : "none",
+                          border: `1px solid ${sel ? profile.border : "hsl(var(--border))"}`,
+                          outline: sel ? `3px solid ${profile.border}` : "none",
                           outlineOffset: "2px",
                           transition: "all 0.15s ease",
                           fontFamily: "'Inter', sans-serif",
@@ -1163,26 +1302,81 @@ const StockInput: React.FC = () => {
                       >
                         <div
                           style={{
-                            fontSize: "13px",
-                            fontWeight: 500,
-                            letterSpacing: "-0.01em",
-                            color: isSelected
-                              ? profile.color
-                              : "hsl(var(--foreground))",
-                            marginBottom: "4px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: "6px",
                           }}
                         >
-                          {profile.label}
+                          <span
+                            style={{
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              letterSpacing: "-0.01em",
+                              color: sel
+                                ? profile.color
+                                : "hsl(var(--foreground))",
+                            }}
+                          >
+                            {profile.label}
+                          </span>
+                          {sel && (
+                            <CheckCircle2
+                              size={13}
+                              style={{ color: profile.color, flexShrink: 0 }}
+                            />
+                          )}
                         </div>
                         <div
                           style={{
-                            fontSize: "12px",
+                            fontSize: "11.5px",
                             color: "hsl(var(--muted-foreground))",
                             fontWeight: 300,
                             lineHeight: 1.45,
+                            marginBottom: "10px",
                           }}
                         >
                           {profile.description}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "5px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "10px",
+                              letterSpacing: "0.04em",
+                              textTransform: "uppercase",
+                              padding: "2px 7px",
+                              borderRadius: "4px",
+                              background: sel
+                                ? profile.border
+                                : "hsl(var(--muted) / 0.4)",
+                              color: sel
+                                ? profile.color
+                                : "hsl(var(--muted-foreground))",
+                            }}
+                          >
+                            {profile.returnRange}
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "10px",
+                              letterSpacing: "0.04em",
+                              padding: "2px 7px",
+                              borderRadius: "4px",
+                              background: "hsl(var(--muted) / 0.25)",
+                              color: "hsl(var(--muted-foreground))",
+                              border: "1px solid hsl(var(--border))",
+                            }}
+                          >
+                            {profile.strategy}
+                          </div>
                         </div>
                       </motion.button>
                     );
@@ -1190,6 +1384,7 @@ const StockInput: React.FC = () => {
                 </div>
               )}
 
+              {/* Auto / Smart AI mode */}
               {profileMode === "auto" && (
                 <div
                   style={{
@@ -1198,285 +1393,167 @@ const StockInput: React.FC = () => {
                     gap: "16px",
                   }}
                 >
-                  {showSavedProfileAlert &&
-                    savedProfile &&
-                    (() => {
-                      const prof = riskProfiles.find(
-                        (p) => p.value === savedProfile.profile,
-                      );
-                      return (
-                        <motion.div
-                          initial={{ opacity: 0, y: -8 }}
-                          animate={{ opacity: 1, y: 0 }}
+                  {/* Saved profile alert */}
+                  {showSavedAlert && savedProfile && savedMeta && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      style={{
+                        padding: "18px",
+                        background: "hsl(var(--secondary) / 0.5)",
+                        backdropFilter: "blur(8px)",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "12px",
+                        }}
+                      >
+                        <History
+                          size={15}
                           style={{
-                            padding: "20px",
-                            background: "hsl(var(--secondary) / 0.5)",
-                            backdropFilter: "blur(8px)",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "8px",
+                            color: "hsl(var(--muted-foreground))",
+                            flexShrink: 0,
+                            marginTop: "2px",
                           }}
-                        >
+                        />
+                        <div style={{ flex: 1 }}>
                           <div
                             style={{
-                              display: "flex",
-                              alignItems: "flex-start",
-                              gap: "14px",
+                              fontSize: "13.5px",
+                              fontWeight: 500,
+                              letterSpacing: "-0.01em",
+                              color: "hsl(var(--foreground))",
+                              marginBottom: "3px",
                             }}
                           >
-                            <History
-                              size={16}
+                            Saved risk profile
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "hsl(var(--muted-foreground))",
+                              fontWeight: 300,
+                              marginBottom: "14px",
+                            }}
+                          >
+                            Last calculated{" "}
+                            {new Date(
+                              savedProfile.updatedAt,
+                            ).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </div>
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              padding: "8px 12px",
+                              background: savedMeta.bg,
+                              border: `1px solid ${savedMeta.border}`,
+                              borderRadius: "7px",
+                              marginBottom: "12px",
+                            }}
+                          >
+                            <span
                               style={{
-                                color: "hsl(var(--muted-foreground))",
-                                flexShrink: 0,
-                                marginTop: "2px",
+                                fontSize: "13px",
+                                fontWeight: 600,
+                                color: savedMeta.color,
+                              }}
+                            >
+                              {savedMeta.label}
+                            </span>
+                            <span
+                              style={{
+                                width: "1px",
+                                height: "12px",
+                                background: savedMeta.border,
                               }}
                             />
-                            <div style={{ flex: 1 }}>
-                              <div
-                                style={{
-                                  fontSize: "13.5px",
-                                  fontWeight: 500,
-                                  letterSpacing: "-0.01em",
-                                  color: "hsl(var(--foreground))",
-                                  marginBottom: "4px",
-                                }}
-                              >
-                                Saved risk profile
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "12px",
-                                  color: "hsl(var(--muted-foreground))",
-                                  fontWeight: 300,
-                                  marginBottom: "16px",
-                                }}
-                              >
-                                Last calculated{" "}
-                                {new Date(
-                                  savedProfile.updatedAt,
-                                ).toLocaleDateString("en-IN", {
-                                  day: "numeric",
-                                  month: "long",
-                                  year: "numeric",
-                                })}
-                              </div>
-                              <div
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "10px",
-                                  padding: "10px 14px",
-                                  background: prof?.bg,
-                                  border: `1px solid ${prof?.border}`,
-                                  borderRadius: "7px",
-                                  marginBottom: "14px",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontSize: "14px",
-                                    fontWeight: 600,
-                                    letterSpacing: "-0.015em",
-                                    color: prof?.color,
-                                  }}
-                                >
-                                  {prof?.label}
-                                </div>
-                                <div
-                                  style={{
-                                    width: "1px",
-                                    height: "14px",
-                                    background: prof?.border,
-                                  }}
-                                />
-                                <div
-                                  style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: "11px",
-                                    color: prof?.color,
-                                  }}
-                                >
-                                  Score: {savedProfile.breakdown.totalScore}
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "6px",
-                                  flexWrap: "wrap",
-                                  marginBottom: "16px",
-                                }}
-                              >
-                                {[
-                                  {
-                                    label: "Age",
-                                    score: savedProfile.breakdown.ageScore,
-                                  },
-                                  {
-                                    label: "Savings",
-                                    score: savedProfile.breakdown.savingsScore,
-                                  },
-                                  {
-                                    label: "Family",
-                                    score: savedProfile.breakdown.familyScore,
-                                  },
-                                  {
-                                    label: "Horizon",
-                                    score: savedProfile.breakdown.horizonScore,
-                                  },
-                                  {
-                                    label: "Invest.",
-                                    score:
-                                      savedProfile.breakdown.investmentScore,
-                                  },
-                                  {
-                                    label: "Ratio",
-                                    score: savedProfile.breakdown.ratioScore,
-                                  },
-                                ].map((item) => (
-                                  <div
-                                    key={item.label}
-                                    style={{
-                                      padding: "4px 8px",
-                                      background: "hsl(var(--card) / 0.5)",
-                                      backdropFilter: "blur(8px)",
-                                      border: "1px solid hsl(var(--border))",
-                                      borderRadius: "5px",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        fontFamily:
-                                          "'JetBrains Mono', monospace",
-                                        fontSize: "10px",
-                                        color: "hsl(var(--muted-foreground))",
-                                        letterSpacing: "0.04em",
-                                        textTransform: "uppercase",
-                                      }}
-                                    >
-                                      {item.label}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontFamily:
-                                          "'JetBrains Mono', monospace",
-                                        fontSize: "12px",
-                                        fontWeight: 500,
-                                        color:
-                                          item.score > 0
-                                            ? "var(--green)"
-                                            : item.score < 0
-                                              ? "var(--red)"
-                                              : "hsl(var(--muted-foreground))",
-                                      }}
-                                    >
-                                      {item.score > 0 ? "+" : ""}
-                                      {item.score}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div style={{ display: "flex", gap: "8px" }}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAcceptedSavedProfile(true);
-                                    setShowSavedProfileAlert(false);
-                                    if (savedProfile) {
-                                      setSelectedProfileFromAuto(
-                                        savedProfile.profile,
-                                      );
-                                      setRiskScoreBreakdown(
-                                        savedProfile.breakdown,
-                                      );
-                                      setUserProfile(savedProfile.profileData);
-                                    }
-                                    toast({
-                                      title: "Profile applied",
-                                      description: `Using ${prof?.label} profile.`,
-                                    });
-                                  }}
-                                  style={{
-                                    flex: 1,
-                                    height: "36px",
-                                    background: "hsl(var(--foreground))",
-                                    color: "hsl(var(--background))",
-                                    border: "none",
-                                    borderRadius: "7px",
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: "6px",
-                                    transition: "opacity 0.12s ease",
-                                    fontFamily: "'Inter', sans-serif",
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    (
-                                      e.currentTarget as HTMLElement
-                                    ).style.opacity = "0.82";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    (
-                                      e.currentTarget as HTMLElement
-                                    ).style.opacity = "1";
-                                  }}
-                                >
-                                  Continue with this
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAcceptedSavedProfile(false);
-                                    setShowSavedProfileAlert(false);
-                                  }}
-                                  style={{
-                                    height: "36px",
-                                    padding: "0 14px",
-                                    background: "transparent",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "7px",
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    color: "hsl(var(--muted-foreground))",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    transition: "background 0.12s ease",
-                                    fontFamily: "'Inter', sans-serif",
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    (
-                                      e.currentTarget as HTMLElement
-                                    ).style.background =
-                                      "hsl(var(--secondary) / 0.7)";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    (
-                                      e.currentTarget as HTMLElement
-                                    ).style.background = "transparent";
-                                  }}
-                                >
-                                  <RefreshCw size={12} /> Recalculate
-                                </button>
-                              </div>
-                            </div>
+                            <span
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: "11px",
+                                color: savedMeta.color,
+                              }}
+                            >
+                              Score: {savedProfile.breakdown.totalScore}
+                            </span>
                           </div>
-                        </motion.div>
-                      );
-                    })()}
-                  {isLoadingSavedProfile && (
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAcceptedSaved(true);
+                                setShowSavedAlert(false);
+                                setAutoProfile(savedProfile.profile);
+                                setRiskScoreBreakdown(savedProfile.breakdown);
+                                setUserProfile(savedProfile.profileData);
+                                toast({
+                                  title: "Profile applied",
+                                  description: `Using ${savedMeta.label}`,
+                                });
+                              }}
+                              style={{
+                                flex: 1,
+                                height: "34px",
+                                background: "hsl(var(--foreground))",
+                                color: "hsl(var(--background))",
+                                border: "none",
+                                borderRadius: "7px",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                cursor: "pointer",
+                                fontFamily: "'Inter', sans-serif",
+                              }}
+                            >
+                              Continue with this
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAcceptedSaved(false);
+                                setShowSavedAlert(false);
+                              }}
+                              style={{
+                                height: "34px",
+                                padding: "0 14px",
+                                background: "transparent",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "7px",
+                                fontSize: "13px",
+                                cursor: "pointer",
+                                color: "hsl(var(--muted-foreground))",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontFamily: "'Inter', sans-serif",
+                              }}
+                            >
+                              <RefreshCw size={11} /> Recalculate
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Loading saved profile */}
+                  {isLoadingSaved && (
                     <div
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: "12px",
-                        padding: "20px",
+                        gap: "10px",
+                        padding: "18px",
                         background: "hsl(var(--card) / 0.4)",
                         backdropFilter: "blur(8px)",
                         border: "1px dashed hsl(var(--border))",
@@ -1484,7 +1561,7 @@ const StockInput: React.FC = () => {
                       }}
                     >
                       <Loader2
-                        size={16}
+                        size={14}
                         style={{
                           animation: "spin 0.8s linear infinite",
                           color: "hsl(var(--muted-foreground))",
@@ -1492,7 +1569,7 @@ const StockInput: React.FC = () => {
                       />
                       <span
                         style={{
-                          fontSize: "13.5px",
+                          fontSize: "13px",
                           color: "hsl(var(--muted-foreground))",
                           fontWeight: 300,
                         }}
@@ -1501,7 +1578,9 @@ const StockInput: React.FC = () => {
                       </span>
                     </div>
                   )}
-                  {!isLoadingSavedProfile && !showSavedProfileAlert && (
+
+                  {/* Questionnaire — shown when no saved profile accepted */}
+                  {!isLoadingSaved && !showSavedAlert && (
                     <div
                       style={{
                         display: "flex",
@@ -1511,7 +1590,7 @@ const StockInput: React.FC = () => {
                     >
                       <div
                         style={{
-                          padding: "14px 16px",
+                          padding: "12px 16px",
                           background: "hsl(var(--secondary) / 0.5)",
                           backdropFilter: "blur(8px)",
                           border: "1px solid hsl(var(--border))",
@@ -1526,10 +1605,11 @@ const StockInput: React.FC = () => {
                             lineHeight: 1.6,
                           }}
                         >
-                          Answer a few questions and we'll compute the optimal
-                          risk profile for you.
+                          Answer a few questions and we'll compute your optimal
+                          risk profile automatically.
                         </p>
                       </div>
+
                       <div
                         style={{
                           display: "grid",
@@ -1589,9 +1669,9 @@ const StockInput: React.FC = () => {
                               gap: "6px",
                             }}
                           >
-                            <Label htmlFor={f.id} required={f.required}>
+                            <FieldLabel htmlFor={f.id} required={f.required}>
                               {f.label}
-                            </Label>
+                            </FieldLabel>
                             <input
                               id={f.id}
                               type="number"
@@ -1610,6 +1690,8 @@ const StockInput: React.FC = () => {
                           </div>
                         ))}
                       </div>
+
+                      {/* Investment horizon */}
                       <div
                         style={{
                           display: "flex",
@@ -1617,7 +1699,7 @@ const StockInput: React.FC = () => {
                           gap: "6px",
                         }}
                       >
-                        <Label required>Investment timeline</Label>
+                        <FieldLabel required>Investment timeline</FieldLabel>
                         <Select
                           value={userProfile.investmentHorizon}
                           onValueChange={(v) =>
@@ -1662,21 +1744,37 @@ const StockInput: React.FC = () => {
               )}
             </div>
 
-            {/* ── Stock Selection ── */}
+            {/* ── Stock selection ── */}
             <div>
-              <p className="mono-label" style={{ marginBottom: "14px" }}>
-                Stock selection
-              </p>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  marginBottom: "14px",
+                }}
+              >
+                <p className="mono-label">Stock selection</p>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "hsl(var(--muted-foreground))",
+                    fontWeight: 300,
+                  }}
+                >
+                  Type a name or ticker → pick from suggestions
+                </span>
+              </div>
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: "8px",
+                  gap: "10px",
                   marginBottom: "8px",
                 }}
               >
                 <AnimatePresence>
-                  {stocks.map((stock, index) => (
+                  {tickers.map((ticker, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -12 }}
@@ -1685,85 +1783,40 @@ const StockInput: React.FC = () => {
                       transition={{ delay: index * 0.04 }}
                       style={{
                         display: "flex",
-                        alignItems: "center",
+                        alignItems: "flex-start",
                         gap: "8px",
                       }}
                     >
-                      <div style={{ flex: 1, position: "relative" }}>
-                        <input
-                          type="text"
-                          placeholder="Ticker — e.g. RELIANCE, TCS, INFY"
-                          value={stock.ticker}
-                          onChange={(e) =>
-                            handleTickerChange(index, e.target.value)
-                          }
-                          disabled={stock.isLoading}
-                          onFocus={() => setFocused(`ticker-${index}`)}
-                          onBlur={() => setFocused(null)}
-                          style={{
-                            ...fieldStyle(focused === `ticker-${index}`),
-                            paddingRight: "40px",
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: "13.5px",
-                            letterSpacing: "0.03em",
-                            borderColor: stock.isVerified
-                              ? "var(--green-border)"
-                              : focused === `ticker-${index}`
-                                ? "hsl(var(--foreground) / 0.35)"
-                                : "hsl(var(--border))",
-                            background: stock.isVerified
-                              ? "var(--green-subtle)"
-                              : "hsl(var(--card) / 0.6)",
-                            opacity: stock.isLoading ? 0.6 : 1,
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: "absolute",
-                            right: "12px",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                          }}
-                        >
-                          {stock.isLoading && (
-                            <Loader2
-                              size={13}
-                              style={{
-                                color: "hsl(var(--muted-foreground))",
-                                animation: "spin 0.8s linear infinite",
-                              }}
-                            />
-                          )}
-                          {stock.isVerified && !stock.isLoading && (
-                            <CheckCircle2
-                              size={13}
-                              style={{ color: "var(--green)" }}
-                            />
-                          )}
-                        </div>
-                      </div>
+                      <StockSearchInput
+                        slotKey={`t-${index}`}
+                        value={ticker}
+                        name={tickerNames[index] ?? ""}
+                        onChange={(t, n) => handleTickerChange(index, t, n)}
+                        onRemove={() => removeTicker(index)}
+                        canRemove={tickers.length > 1}
+                      />
                       <button
                         type="button"
-                        onClick={(e) => removeStockField(index, e)}
-                        disabled={stocks.length === 1 || stock.isLoading}
+                        onClick={() => removeTicker(index)}
+                        disabled={tickers.length === 1}
                         style={{
                           width: "32px",
-                          height: "32px",
+                          height: "38px",
                           borderRadius: "6px",
                           background: "transparent",
                           border: "1px solid hsl(var(--border))",
                           cursor:
-                            stocks.length === 1 ? "not-allowed" : "pointer",
+                            tickers.length === 1 ? "not-allowed" : "pointer",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           color: "hsl(var(--muted-foreground))",
-                          opacity: stocks.length === 1 ? 0.4 : 1,
+                          opacity: tickers.length === 1 ? 0.4 : 1,
                           transition: "background 0.12s ease",
                           flexShrink: 0,
                         }}
                         onMouseEnter={(e) => {
-                          if (stocks.length > 1)
+                          if (tickers.length > 1)
                             (e.currentTarget as HTMLElement).style.background =
                               "var(--red-subtle)";
                         }}
@@ -1780,8 +1833,7 @@ const StockInput: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={(e) => addStockField(e)}
-                disabled={stocks.some((s) => s.isLoading)}
+                onClick={addTicker}
                 style={{
                   width: "100%",
                   height: "36px",
@@ -1813,7 +1865,7 @@ const StockInput: React.FC = () => {
               </button>
             </div>
 
-            {/* ── Investment Amount ── */}
+            {/* ── Investment amount ── */}
             <div>
               <p className="mono-label" style={{ marginBottom: "14px" }}>
                 Investment amount
@@ -1852,12 +1904,7 @@ const StockInput: React.FC = () => {
                     initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    style={{
-                      marginTop: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
+                    style={{ marginTop: "8px" }}
                   >
                     <span
                       style={{
@@ -1869,48 +1916,139 @@ const StockInput: React.FC = () => {
                     >
                       ₹{totalAmount.toLocaleString("en-IN")}
                     </span>
-                    <span
-                      style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: "11px",
-                        color: "hsl(var(--muted-foreground))",
-                        opacity: 0.5,
-                      }}
-                    >
-                      ·{" "}
-                      {stocks.length > 1
-                        ? `÷ ${stocks.length} stocks`
-                        : "1 stock"}
-                    </span>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </div>
 
+          {/* ── Deep mode toggle ── */}
+          <div style={{ padding: "0 28px 14px" }}>
+            <button
+              type="button"
+              onClick={() => setDeepMode((v) => !v)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 14px",
+                borderRadius: "8px",
+                cursor: "pointer",
+                background: deepMode
+                  ? "var(--amber-subtle)"
+                  : "hsl(var(--secondary) / 0.4)",
+                border: `1px solid ${deepMode ? "var(--amber-border)" : "hsl(var(--border))"}`,
+                transition: "all 0.15s ease",
+              }}
+            >
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "10px" }}
+              >
+                {/* pill toggle */}
+                <div
+                  style={{
+                    width: "32px",
+                    height: "18px",
+                    borderRadius: "9px",
+                    position: "relative",
+                    background: deepMode ? "var(--amber)" : "hsl(var(--muted))",
+                    transition: "background 0.15s ease",
+                    flexShrink: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "2px",
+                      left: deepMode ? "16px" : "2px",
+                      width: "14px",
+                      height: "14px",
+                      borderRadius: "50%",
+                      background: "#fff",
+                      transition: "left 0.15s ease",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    }}
+                  />
+                </div>
+                <div style={{ textAlign: "left" }}>
+                  <div
+                    style={{
+                      fontSize: "12.5px",
+                      fontWeight: 500,
+                      color: deepMode
+                        ? "var(--amber)"
+                        : "hsl(var(--foreground))",
+                    }}
+                  >
+                    Deep analysis
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "hsl(var(--muted-foreground))",
+                      fontWeight: 300,
+                      marginTop: "1px",
+                    }}
+                  >
+                    {deepMode
+                      ? "Optuna tunes XGBoost per stock · ~2–3 mins"
+                      : "Default XGBoost params · ~15–30s"}
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: "9px",
+                  letterSpacing: "0.05em",
+                  padding: "2px 7px",
+                  borderRadius: "4px",
+                  background: deepMode
+                    ? "var(--amber-subtle)"
+                    : "hsl(var(--muted) / 0.5)",
+                  color: deepMode
+                    ? "var(--amber)"
+                    : "hsl(var(--muted-foreground))",
+                  border: `1px solid ${deepMode ? "var(--amber-border)" : "transparent"}`,
+                }}
+              >
+                {deepMode ? "ON" : "OFF"}
+              </div>
+            </button>
+            {deepMode && (
+              <p
+                style={{
+                  fontSize: "11px",
+                  color: "hsl(var(--muted-foreground))",
+                  fontWeight: 300,
+                  margin: "8px 2px 0",
+                  lineHeight: 1.5,
+                }}
+              >
+                Runs Bayesian HPO (Optuna) to find optimal XGBoost
+                hyperparameters per stock. Produces better IC and direction
+                accuracy at the cost of wait time. Standard mode trains with
+                sensible defaults and is sufficient for most use cases.
+              </p>
+            )}
+          </div>
+
           {/* ── Submit ── */}
           <div style={{ padding: "0 28px 28px" }}>
             <button
               type="button"
-              onClick={(e) => handleSubmit(e)}
-              disabled={
-                isLoading ||
-                stocks.some((s) => s.isLoading) ||
-                (!isLoggedIn && !localStorage.getItem("userId"))
-              }
+              onClick={handleSubmit}
+              disabled={isLoading || !canSubmit}
               style={{
                 width: "100%",
                 height: "42px",
                 background:
-                  isLoading ||
-                  stocks.some((s) => s.isLoading) ||
-                  (!isLoggedIn && !localStorage.getItem("userId"))
+                  isLoading || !canSubmit
                     ? "hsl(var(--muted) / 0.6)"
                     : "hsl(var(--foreground))",
                 color:
-                  isLoading ||
-                  stocks.some((s) => s.isLoading) ||
-                  (!isLoggedIn && !localStorage.getItem("userId"))
+                  isLoading || !canSubmit
                     ? "hsl(var(--muted-foreground))"
                     : "hsl(var(--background))",
                 border: "none",
@@ -1940,9 +2078,14 @@ const StockInput: React.FC = () => {
                     size={14}
                     style={{ animation: "spin 0.8s linear infinite" }}
                   />{" "}
-                  Optimizing portfolio…
+                  Optimizing…{" "}
+                  {elapsed > 0 && (
+                    <span style={{ opacity: 0.6, fontSize: "12px" }}>
+                      ({elapsed}s)
+                    </span>
+                  )}
                 </>
-              ) : !isLoggedIn && !localStorage.getItem("userId") ? (
+              ) : !canSubmit ? (
                 "Sign in to optimize"
               ) : (
                 <>
@@ -1950,13 +2093,103 @@ const StockInput: React.FC = () => {
                 </>
               )}
             </button>
+            {isLoading &&
+              (() => {
+                const steps = deepMode
+                  ? [
+                      { until: 8, label: "Fetching market data" },
+                      { until: 15, label: "Engineering technical features" },
+                      {
+                        until: 120,
+                        label:
+                          "Optuna HPO — tuning XGBoost per stock (this takes 2–3 mins)",
+                      },
+                      { until: 150, label: "Training final optimized models" },
+                      { until: 170, label: "Running MPT optimization" },
+                      {
+                        until: Infinity,
+                        label: "Finalizing portfolio allocation",
+                      },
+                    ]
+                  : [
+                      { until: 6, label: "Fetching market data" },
+                      { until: 10, label: "Engineering technical features" },
+                      { until: 25, label: "Training XGBoost models" },
+                      { until: 35, label: "Running MPT optimization" },
+                      {
+                        until: Infinity,
+                        label: "Finalizing portfolio allocation",
+                      },
+                    ];
+                const current = steps.find((s) => elapsed < s.until)!;
+                const next = steps[steps.indexOf(current) + 1];
+                return (
+                  <div
+                    style={{
+                      marginTop: "14px",
+                      padding: "14px 16px",
+                      background: "hsl(var(--secondary) / 0.5)",
+                      backdropFilter: "blur(8px)",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginBottom: next ? "10px" : "0",
+                      }}
+                    >
+                      <Loader2
+                        size={12}
+                        style={{
+                          color: "hsl(var(--muted-foreground))",
+                          animation: "spin 0.8s linear infinite",
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "hsl(var(--foreground))",
+                        }}
+                      >
+                        {current.label}
+                      </span>
+                    </div>
+                    {next && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          paddingLeft: "22px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "hsl(var(--muted-foreground))",
+                            fontWeight: 300,
+                          }}
+                        >
+                          Next: {next.label}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
           </div>
         </div>
       </motion.div>
 
       {/* ── Results ── */}
       <AnimatePresence>
-        {!isLoading && submittedStocks && (
+        {!isLoading && result && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1964,12 +2197,7 @@ const StockInput: React.FC = () => {
             transition={{ delay: 0.15 }}
             style={{ marginTop: "32px" }}
           >
-            <ResultsDisplay
-              stocks={submittedStocks}
-              optimizedAllocation={optimizedAllocation}
-              riskMetric={riskMetric}
-              expectedReturn={expectedReturn}
-            />
+            <ResultsDisplay result={result} />
           </motion.div>
         )}
       </AnimatePresence>
