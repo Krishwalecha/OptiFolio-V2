@@ -172,21 +172,6 @@ app.post("/api/optimize", (req, res) => {
       const result = JSON.parse(stdout);
       if (result.error) return res.status(400).json(result);
 
-      // Persist allocation to Supabase (non-blocking)
-      if (result.allocation?.length) {
-        const rows = result.allocation.map((a) => ({
-          user_id:    userId,
-          ticker:     a.ticker,
-          allocation: a.weight_pct,
-          portfolio_session_id: `${userId}_${Date.now()}`,
-          created_at: new Date().toISOString(),
-        }));
-        supabase
-          .from("user_portfolios")
-          .upsert(rows, { onConflict: "user_id,ticker" })
-          .then(({ error }) => { if (error) console.warn("[supabase]", error.message); });
-      }
-
       return res.status(200).json(result);
     } catch (e) {
       console.error("[optimize] JSON parse failed:", e.message, "\nstdout:", stdout.slice(-500));
@@ -281,16 +266,16 @@ app.post("/api/saveRiskProfile", async (req, res) => {
 app.get("/api/userPortfolios/:userId", async (req, res) => {
   const { data, error } = await supabase
     .from("user_portfolios")
-    .select("ticker, allocation, created_at, portfolio_session_id")
+    .select("ticker, allocation, invested_inr, created_at, portfolio_session_id")
     .eq("user_id", req.params.userId)
     .order("created_at", { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
 
   const grouped = (data || []).reduce((acc, row) => {
-    const key = row.created_at.slice(0, 10);
-    if (!acc[key]) acc[key] = { date: key, tickers: [] };
-    acc[key].tickers.push({ ticker: row.ticker, allocation: parseFloat(row.allocation) || 0 });
+    const key = row.portfolio_session_id || row.created_at;
+    if (!acc[key]) acc[key] = { sessionId: key, date: row.created_at, tickers: [] };
+    acc[key].tickers.push({ ticker: row.ticker, allocation: parseFloat(row.allocation) || 0, invested_inr: parseFloat(row.invested_inr) || 0 });
     return acc;
   }, {});
 
@@ -300,12 +285,48 @@ app.get("/api/userPortfolios/:userId", async (req, res) => {
   });
 });
 
+app.post("/api/savePortfolio", async (req, res) => {
+  const { userId, sessionId, allocation } = req.body;
+  if (!userId || !sessionId || !Array.isArray(allocation) || !allocation.length)
+    return res.status(400).json({ error: "userId, sessionId and allocation required." });
+
+  const now = new Date().toISOString();
+  const rows = allocation.map((a) => ({
+    user_id: userId,
+    ticker: a.ticker,
+    allocation: a.weight_pct,
+    invested_inr: a.invested_inr ?? 0,
+    portfolio_session_id: sessionId,
+    created_at: now,
+  }));
+
+  const { error } = await supabase
+    .from("user_portfolios")
+    .upsert(rows, { onConflict: "user_id,portfolio_session_id,ticker" });
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ message: "Saved", sessionId });
+});
+
+app.post("/api/deleteSession", async (req, res) => {
+  const { userId, sessionId } = req.body;
+  if (!userId || !sessionId) return res.status(400).json({ error: "userId and sessionId required." });
+  const { error } = await supabase
+    .from("user_portfolios")
+    .delete()
+    .eq("user_id", userId)
+    .eq("portfolio_session_id", sessionId);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ message: "Session deleted" });
+});
+
 app.post("/api/deletePortfolio", async (req, res) => {
-  const { ticker, userId } = req.body;
+  const { ticker, userId, sessionId } = req.body;
   if (!ticker || !userId) return res.status(400).json({ error: "Ticker and userId required." });
 
-  const { data, error } = await supabase
-    .from("user_portfolios").delete().eq("user_id", userId).eq("ticker", ticker).select();
+  let query = supabase.from("user_portfolios").delete().eq("user_id", userId).eq("ticker", ticker);
+  if (sessionId) query = query.eq("portfolio_session_id", sessionId);
+  const { data, error } = await query.select();
 
   if (error)  return res.status(500).json({ error: error.message });
   if (!data?.length) return res.status(404).json({ error: "Not found." });
@@ -365,6 +386,34 @@ app.get("/api/news/rss", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Stock history (5Y OHLCV for charts) ──────────────────────────────────────
+app.get("/api/stockHistory/:ticker", (req, res) => {
+  const ticker = (req.params.ticker || "").trim().toUpperCase();
+  if (!ticker) return res.status(400).json({ error: "ticker required" });
+
+  const scriptPath = path.join(__dirname, "api", "stock_history.py");
+  const py = spawn("python", [scriptPath], {
+    cwd: __dirname,
+    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+  });
+
+  let stdout = "", stderr = "";
+  py.stdin.write(ticker);
+  py.stdin.end();
+  py.stdout.on("data", (d) => { stdout += d.toString(); });
+  py.stderr.on("data", (d) => { stderr += d.toString(); });
+  py.on("close", (code) => {
+    try {
+      const result = JSON.parse(stdout);
+      if (result.error) return res.status(404).json(result);
+      return res.json(result);
+    } catch {
+      console.error("[stockHistory] parse error:", stderr.slice(-500));
+      return res.status(500).json({ error: "Failed to fetch history" });
+    }
+  });
 });
 
 // ── Stock search (autocomplete) ───────────────────────────────────────────────

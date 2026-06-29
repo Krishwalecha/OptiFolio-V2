@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import {
   optimize,
+  savePortfolio,
   OptimizeResult,
   RiskProfile,
 } from "@/services/optimizerService";
@@ -70,6 +71,8 @@ const StockInput: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [deepMode, setDeepMode] = useState(false);
   const [result, setResult] = useState<OptimizeResult | null>(null);
+  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
@@ -288,6 +291,7 @@ const StockInput: React.FC = () => {
 
       const res = await optimize({ tickers: clean, investment: totalAmount, risk: finalProfile, userId: uid, deepMode });
       setResult(res);
+      setSavedSessionId(null);
 
       const profMeta = AUTO_PROFILES[finalProfile];
       toast({ title: "Portfolio optimized ✓", description: `${res.allocation.length} stocks · ${profMeta.label}` });
@@ -1019,7 +1023,25 @@ const StockInput: React.FC = () => {
             transition={{ delay: 0.15 }}
             style={{ marginTop: "32px" }}
           >
-            <ResultsDisplay result={result} />
+            <ResultsDisplay
+              result={result}
+              saved={!!savedSessionId}
+              isSaving={isSaving}
+              onSave={async () => {
+                if (!userId || !result) return;
+                setIsSaving(true);
+                try {
+                  const sid = `${userId}_${Date.now()}`;
+                  await savePortfolio(userId, sid, result.allocation);
+                  setSavedSessionId(sid);
+                  toast({ title: "Portfolio saved", description: `${result.allocation.length} holdings added.` });
+                } catch (err: any) {
+                  toast({ title: "Save failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>

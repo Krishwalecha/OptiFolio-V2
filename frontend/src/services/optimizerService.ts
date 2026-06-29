@@ -73,6 +73,16 @@ export interface OptimizeRequest {
   deepMode?: boolean;
 }
 
+export async function savePortfolio(userId: string, sessionId: string, allocation: AllocationItem[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/savePortfolio`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, sessionId, allocation }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error ?? `Server error ${res.status}`);
+}
+
 export async function optimize(req: OptimizeRequest): Promise<OptimizeResult> {
   const res = await fetch(`${API_BASE}/api/optimize`, {
     method: "POST",

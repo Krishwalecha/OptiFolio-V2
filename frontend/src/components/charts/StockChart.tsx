@@ -32,6 +32,7 @@ interface AllocationReason {
 interface StockChartProps {
   ticker: string;
   allocation: number;
+  investedInr?: number;
   chartData?: ChartPoint[];
   reason?: AllocationReason;
 }
@@ -176,9 +177,12 @@ function modalAnalysis(
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const API_BASE = import.meta.env.VITE_API_URL as string;
+
 const StockChart: React.FC<StockChartProps> = ({
   ticker,
   allocation,
+  investedInr,
   chartData,
   reason,
 }) => {
@@ -193,8 +197,20 @@ const StockChart: React.FC<StockChartProps> = ({
     price: 0,
   });
   const [modalOpen, setModalOpen] = useState(false);
+  const [fetchedData, setFetchedData] = useState<ChartPoint[] | null>(null);
 
-  const data = chartData ?? [];
+  useEffect(() => {
+    if (chartData !== undefined || !ticker) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/stockHistory/${encodeURIComponent(ticker)}`)
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((d) => { if (!cancelled) setFetchedData(d.points ?? []); })
+      .catch(() => { if (!cancelled) setFetchedData([]); });
+    return () => { cancelled = true; };
+  }, [ticker, chartData]);
+
+  const isLoadingData = chartData === undefined && fetchedData === null;
+  const data = chartData ?? fetchedData ?? [];
   const hasData = data.length > 0;
 
   const currentPrice = hasData ? data[data.length - 1].close : 0;
@@ -366,6 +382,39 @@ const StockChart: React.FC<StockChartProps> = ({
       svg.appendChild(hit);
     });
   }, [data, isDark, ticker, hasData]);
+
+  if (isLoadingData) {
+    return (
+      <div
+        style={{
+          background: "hsl(var(--card) / 0.6)",
+          backdropFilter: "blur(8px)",
+          border: "1px solid hsl(var(--border))",
+          borderRadius: "10px",
+          minHeight: "360px",
+          display: "flex",
+          flexDirection: "column",
+          padding: "20px",
+          gap: "12px",
+        }}
+      >
+        {/* ticker + price skeleton */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div style={{ width: "72px", height: "14px", borderRadius: "4px", background: "hsl(var(--muted)/0.4)", animation: "pulse 1.4s ease-in-out infinite" }} />
+          <div style={{ width: "48px", height: "12px", borderRadius: "4px", background: "hsl(var(--muted)/0.3)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        </div>
+        {/* chart area skeleton */}
+        <div style={{ flex: 1, minHeight: "200px", borderRadius: "6px", background: "hsl(var(--muted)/0.15)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        {/* stats row skeleton */}
+        <div style={{ display: "flex", gap: "8px" }}>
+          {[80, 64, 72].map((w, i) => (
+            <div key={i} style={{ width: `${w}px`, height: "10px", borderRadius: "4px", background: "hsl(var(--muted)/0.3)", animation: "pulse 1.4s ease-in-out infinite" }} />
+          ))}
+        </div>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+      </div>
+    );
+  }
 
   if (!hasData) {
     return (
@@ -574,6 +623,15 @@ const StockChart: React.FC<StockChartProps> = ({
             >
               {allocation.toFixed(1)}%
             </div>
+            {investedInr != null && investedInr > 0 && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10.5px", color: "hsl(var(--muted-foreground))", marginTop: "1px" }}>
+                ₹{investedInr >= 100000
+                  ? `${(investedInr / 100000).toFixed(1)}L`
+                  : investedInr >= 1000
+                  ? `${(investedInr / 1000).toFixed(1)}K`
+                  : investedInr.toFixed(0)}
+              </div>
+            )}
           </div>
         </div>
 

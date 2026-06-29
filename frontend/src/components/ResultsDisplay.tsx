@@ -1,11 +1,14 @@
 import React, { useState } from "react";
 import StockChart, { ChartPoint } from "./charts/StockChart";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, TrendingDown, PieChart, ShieldCheck, ChevronDown, XCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, PieChart, ShieldCheck, ChevronDown, XCircle, Plus, CheckCircle2, Loader2 } from "lucide-react";
 import { OptimizeResult, DroppedStock } from "@/services/optimizerService";
 
 interface ResultsDisplayProps {
   result: OptimizeResult;
+  onSave?: () => void;
+  isSaving?: boolean;
+  saved?: boolean;
 }
 
 const fadeUp = {
@@ -32,7 +35,7 @@ function filterByPeriod(data: ChartPoint[], period: ChartPeriod): ChartPoint[] {
   return data.filter((d) => new Date(d.date) >= cutoff);
 }
 
-const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result }) => {
+const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, onSave, isSaving, saved }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("5Y");
   const { allocation, performance, risk_profile, strategy, investment, chart_data, dropped_stocks } = result;
@@ -104,16 +107,43 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result }) => {
               Portfolio Summary
             </h2>
           </div>
-          {/* Risk badge */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            padding: "5px 12px", borderRadius: "99px",
-            background: riskMeta.bg, border: `1px solid ${riskMeta.border}`,
-          }}>
-            <ShieldCheck size={12} style={{ color: riskMeta.color }} />
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", letterSpacing: "0.05em", textTransform: "uppercase", color: riskMeta.color }}>
-              {riskMeta.label}
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* Risk badge */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "5px 12px", borderRadius: "99px",
+              background: riskMeta.bg, border: `1px solid ${riskMeta.border}`,
+            }}>
+              <ShieldCheck size={12} style={{ color: riskMeta.color }} />
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", letterSpacing: "0.05em", textTransform: "uppercase", color: riskMeta.color }}>
+                {riskMeta.label}
+              </span>
+            </div>
+
+            {/* Add to portfolio */}
+            {onSave && (
+              saved ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", background: "hsl(var(--card) / 0.6)", border: "1px solid hsl(var(--border))", borderRadius: "7px", fontSize: "13px", color: "hsl(var(--muted-foreground))" }}>
+                  <CheckCircle2 size={13} style={{ color: "#22c55e" }} /> Saved
+                </div>
+              ) : (
+                <button
+                  disabled={isSaving}
+                  onClick={onSave}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "6px",
+                    padding: "6px 14px", background: "hsl(var(--foreground))",
+                    color: "hsl(var(--background))", border: "none", borderRadius: "7px",
+                    fontSize: "13px", fontWeight: 500, cursor: isSaving ? "not-allowed" : "pointer",
+                    opacity: isSaving ? 0.7 : 1, fontFamily: "'Inter', sans-serif",
+                    transition: "opacity 0.12s ease",
+                  }}
+                >
+                  {isSaving ? <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} /> : <Plus size={13} />}
+                  Add to portfolio
+                </button>
+              )
+            )}
           </div>
         </div>
 
