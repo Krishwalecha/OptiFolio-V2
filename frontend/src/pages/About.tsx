@@ -151,7 +151,7 @@ const About: React.FC = () => {
           <section
             style={{
               padding: "88px 24px 80px",
-              maxWidth: "780px",
+              maxWidth: "1100px",
               margin: "0 auto",
               textAlign: "center",
             }}
@@ -211,8 +211,8 @@ const About: React.FC = () => {
           </section>
 
           {/* ── How it works ── */}
-          <section style={{ padding: "64px 24px" }}>
-            <div style={{ maxWidth: "780px", margin: "0 auto" }}>
+          <section style={{ padding: "64px 24px", borderTop: "1px solid hsl(var(--border))" }}>
+            <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
               <p className="mono-label" style={{ marginBottom: "36px" }}>
                 How it works
               </p>
@@ -284,10 +284,11 @@ const About: React.FC = () => {
           </section>
 
           {/* ── Features ── */}
-          <section
+          <section style={{ borderTop: "1px solid hsl(var(--border))" }}>
+          <div
             style={{
               padding: "72px 24px",
-              maxWidth: "780px",
+              maxWidth: "1100px",
               margin: "0 auto",
             }}
           >
@@ -298,7 +299,7 @@ const About: React.FC = () => {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, 1fr)",
+                gridTemplateColumns: "repeat(4, 1fr)",
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "10px",
                 overflow: "hidden",
@@ -306,8 +307,11 @@ const About: React.FC = () => {
             >
               {features.map((f, i) => {
                 const Icon = f.icon;
-                const isRightCol = i % 2 === 1;
-                const isLastRow = i >= features.length - 2;
+                const col = i % 4;
+                const row = Math.floor(i / 4);
+                const totalRows = Math.ceil(features.length / 4);
+                const isRightCol = col === 3;
+                const isLastRow = row === totalRows - 1;
                 return (
                   <motion.div
                     key={f.title}
@@ -378,6 +382,7 @@ const About: React.FC = () => {
                 );
               })}
             </div>
+          </div>
           </section>
 
           {/* ── CTA ── */}

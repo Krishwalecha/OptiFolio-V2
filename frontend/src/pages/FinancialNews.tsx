@@ -443,7 +443,7 @@ export default function FinancialNews() {
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
           @keyframes pulse-dot { 0%,100%{opacity:1}50%{opacity:0.3} }
-          @keyframes intel-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0)} 50%{box-shadow:0 0 0 5px rgba(34,197,94,0.12)} }
+          @keyframes intel-pulse { 0%,100%{box-shadow:0 0 0 0 transparent} 50%{box-shadow:0 0 0 5px var(--green-subtle)} }
           .filter-tab:hover { color: hsl(var(--foreground)) !important; }
           .article-row:hover { background: hsl(var(--secondary)/0.8) !important; }
           .mode-btn:hover { opacity: 1 !important; }
@@ -453,9 +453,9 @@ export default function FinancialNews() {
         <main style={{ flex: 1 }}>
           <div
             style={{
-              maxWidth: "1200px",
+              maxWidth: "1100px",
               margin: "0 auto",
-              padding: "48px 24px 80px",
+              padding: "56px 24px 80px",
               position: "relative",
             }}
           >
@@ -474,16 +474,7 @@ export default function FinancialNews() {
                 }}
               >
                 <div>
-                  <p
-                    style={{
-                      marginBottom: "6px",
-                      fontSize: "11px",
-                      fontFamily: "monospace",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.07em",
-                      color: "hsl(var(--muted-foreground))",
-                    }}
-                  >
+                  <p className="mono-label" style={{ marginBottom: "6px" }}>
                     Indian markets
                   </p>
                   <div
@@ -501,7 +492,6 @@ export default function FinancialNews() {
                         color: "hsl(var(--foreground))",
                         margin: 0,
                         letterSpacing: "-0.03em",
-                        fontWeight: 600,
                       }}
                     >
                       Market News
@@ -511,14 +501,14 @@ export default function FinancialNews() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "5px",
-                        background: "rgba(34,197,94,0.1)",
-                        border: "1px solid rgba(34,197,94,0.3)",
+                        background: "var(--green-subtle)",
+                        border: "1px solid var(--green-border)",
                         borderRadius: "99px",
                         padding: "3px 9px",
                         fontSize: "10px",
                         letterSpacing: "0.06em",
                         textTransform: "uppercase",
-                        color: "#22c55e",
+                        color: "var(--green)",
                       }}
                     >
                       <span
@@ -526,7 +516,7 @@ export default function FinancialNews() {
                           width: "5px",
                           height: "5px",
                           borderRadius: "50%",
-                          background: "#22c55e",
+                          background: "var(--green)",
                           animation: "pulse-dot 2.4s ease-in-out infinite",
                         }}
                       />
@@ -561,7 +551,7 @@ export default function FinancialNews() {
                       style={{
                         fontSize: "11px",
                         color: "hsl(var(--muted-foreground))",
-                        fontFamily: "monospace",
+                        fontFamily: "'JetBrains Mono', monospace",
                       }}
                     >
                       cached {cacheAgeStr}
@@ -725,14 +715,14 @@ export default function FinancialNews() {
                         alignItems: "center",
                         gap: "6px",
                         padding: "7px 14px",
-                        background: "rgba(34,197,94,0.08)",
+                        background: "var(--green-subtle)",
                         backdropFilter: "blur(8px)",
-                        border: "1px solid rgba(34,197,94,0.3)",
+                        border: "1px solid var(--green-border)",
                         borderRadius: "8px",
                         cursor: "pointer",
                         fontSize: "13px",
                         fontWeight: 500,
-                        color: "#22c55e",
+                        color: "var(--green)",
                         transition: "all 0.15s",
                       }}
                     >
@@ -766,10 +756,10 @@ export default function FinancialNews() {
                           background: showIntelligence
                             ? "hsl(var(--foreground))"
                             : intelligenceReady
-                              ? "linear-gradient(135deg,rgba(34,197,94,0.12),rgba(59,130,246,0.1))"
+                              ? "linear-gradient(135deg,var(--green-subtle),var(--blue-subtle))"
                               : "hsl(var(--card)/0.7)",
                           backdropFilter: "blur(8px)",
-                          border: `1px solid ${showIntelligence ? "hsl(var(--foreground))" : intelligenceReady ? "rgba(34,197,94,0.4)" : "hsl(var(--border))"}`,
+                          border: `1px solid ${showIntelligence ? "hsl(var(--foreground))" : intelligenceReady ? "var(--green-border)" : "hsl(var(--border))"}`,
                           borderRadius: "8px",
                           cursor: intelligenceReady ? "pointer" : "default",
                           fontSize: "13px",
@@ -777,7 +767,7 @@ export default function FinancialNews() {
                           color: showIntelligence
                             ? "hsl(var(--background))"
                             : intelligenceReady
-                              ? "#22c55e"
+                              ? "var(--green)"
                               : "hsl(var(--muted-foreground))",
                           opacity: isAnalyzing ? 0.6 : 1,
                           transition: "all 0.15s",
@@ -810,7 +800,7 @@ export default function FinancialNews() {
                                 style={{
                                   height: "100%",
                                   width: `${pct}%`,
-                                  background: "#22c55e",
+                                  background: "var(--green)",
                                   transition: "width 0.4s",
                                 }}
                               />
@@ -828,12 +818,12 @@ export default function FinancialNews() {
                               <span
                                 style={{
                                   fontSize: "10px",
-                                  background: "rgba(34,197,94,0.18)",
-                                  border: "1px solid rgba(34,197,94,0.35)",
+                                  background: "var(--green-subtle)",
+                                  border: "1px solid var(--green-border)",
                                   borderRadius: "99px",
                                   padding: "1px 7px",
-                                  color: "#22c55e",
-                                  fontWeight: 700,
+                                  color: "var(--green)",
+                                  fontWeight: 500,
                                 }}
                               >
                                 {stockSignals.length}
@@ -871,7 +861,7 @@ export default function FinancialNews() {
                           style={{
                             fontSize: "11px",
                             color: "hsl(var(--muted-foreground))",
-                            fontFamily: "monospace",
+                            fontFamily: "'JetBrains Mono', monospace",
                           }}
                         >
                           tracking
@@ -895,7 +885,7 @@ export default function FinancialNews() {
                               padding: "2px 7px",
                               fontSize: "11px",
                               fontWeight: 500,
-                              fontFamily: "monospace",
+                              fontFamily: "'JetBrains Mono', monospace",
                               color: "hsl(var(--foreground))",
                             }}
                           >
@@ -946,10 +936,10 @@ export default function FinancialNews() {
                             width: `${p}%`,
                             background:
                               s === "positive"
-                                ? "#22c55e"
+                                ? "var(--green)"
                                 : s === "negative"
-                                  ? "#ef4444"
-                                  : "#f59e0b",
+                                  ? "var(--red)"
+                                  : "var(--amber)",
                             transition: "width 0.8s cubic-bezier(0.4,0,0.2,1)",
                           }}
                         />
@@ -1403,7 +1393,7 @@ export default function FinancialNews() {
                                             borderRadius: "3px",
                                             padding: "1px 5px",
                                             fontSize: "10px",
-                                            fontFamily: "monospace",
+                                            fontFamily: "'JetBrains Mono', monospace",
                                             color: "hsl(var(--foreground))",
                                             fontWeight: 500,
                                           }}

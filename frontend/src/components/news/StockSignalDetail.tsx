@@ -98,9 +98,9 @@ export default function StockSignalDetail({
               >
                 <span
                   style={{
-                    fontSize: "22px",
-                    fontWeight: 800,
-                    fontFamily: "monospace",
+                    fontSize: "18px",
+                    fontWeight: 500,
+                    fontFamily: "'JetBrains Mono', monospace",
                     color: "hsl(var(--foreground))",
                   }}
                 >
@@ -158,14 +158,14 @@ export default function StockSignalDetail({
                   padding: "5px 12px",
                   height: "28px",
                   background: inCart
-                    ? "rgba(34,197,94,0.12)"
+                    ? "var(--green-subtle)"
                     : "hsl(var(--secondary))",
-                  border: `1px solid ${inCart ? "rgba(34,197,94,0.4)" : "hsl(var(--border))"}`,
+                  border: `1px solid ${inCart ? "var(--green-border)" : "hsl(var(--border))"}`,
                   borderRadius: "6px",
                   cursor: "pointer",
                   fontSize: "11px",
                   fontWeight: 500,
-                  color: inCart ? "#22c55e" : "hsl(var(--muted-foreground))",
+                  color: inCart ? "var(--green)" : "hsl(var(--muted-foreground))",
                   transition: "all 0.15s",
                 }}
               >
@@ -243,9 +243,9 @@ export default function StockSignalDetail({
                 }}
               >
                 {[
-                  { label: "Bullish", count: signal.bullishCount, color: "#22c55e" },
-                  { label: "Bearish", count: signal.bearishCount, color: "#ef4444" },
-                  { label: "Neutral", count: signal.neutralCount, color: "#f59e0b" },
+                  { label: "Bullish", count: signal.bullishCount, color: "var(--green)" },
+                  { label: "Bearish", count: signal.bearishCount, color: "var(--red)" },
+                  { label: "Neutral", count: signal.neutralCount, color: "var(--amber)" },
                 ].map(({ label, count, color }) => (
                   <div
                     key={label}
@@ -259,7 +259,7 @@ export default function StockSignalDetail({
                     <p
                       style={{
                         fontSize: "20px",
-                        fontWeight: 700,
+                        fontWeight: 500,
                         color,
                         margin: "0 0 2px 0",
                       }}
@@ -291,7 +291,7 @@ export default function StockSignalDetail({
                   <div
                     style={{
                       width: `${(signal.bullishCount / signal.totalMentions) * 100}%`,
-                      background: "#22c55e",
+                      background: "var(--green)",
                     }}
                   />
                 )}
@@ -299,7 +299,7 @@ export default function StockSignalDetail({
                   <div
                     style={{
                       width: `${(signal.bearishCount / signal.totalMentions) * 100}%`,
-                      background: "#ef4444",
+                      background: "var(--red)",
                     }}
                   />
                 )}
@@ -307,7 +307,7 @@ export default function StockSignalDetail({
                   <div
                     style={{
                       width: `${(signal.neutralCount / signal.totalMentions) * 100}%`,
-                      background: "#f59e0b",
+                      background: "var(--amber)",
                       opacity: 0.6,
                     }}
                   />
@@ -318,8 +318,8 @@ export default function StockSignalDetail({
                   style={{
                     marginTop: "12px",
                     padding: "8px 12px",
-                    background: "rgba(245,158,11,0.08)",
-                    border: "1px solid rgba(245,158,11,0.2)",
+                    background: "var(--amber-subtle)",
+                    border: "1px solid var(--amber-border)",
                     borderRadius: "6px",
                     display: "flex",
                     gap: "8px",
@@ -329,7 +329,7 @@ export default function StockSignalDetail({
                   <ShieldAlert
                     size={12}
                     style={{
-                      color: "#f59e0b",
+                      color: "var(--amber)",
                       flexShrink: 0,
                       marginTop: "1px",
                     }}
@@ -509,14 +509,14 @@ export default function StockSignalDetail({
               gap: "6px",
               padding: "10px",
               background: inCart
-                ? "rgba(34,197,94,0.12)"
+                ? "var(--green-subtle)"
                 : "hsl(var(--secondary))",
-              border: `1px solid ${inCart ? "rgba(34,197,94,0.35)" : "hsl(var(--border))"}`,
+              border: `1px solid ${inCart ? "var(--green-border)" : "hsl(var(--border))"}`,
               borderRadius: "8px",
               cursor: "pointer",
               fontSize: "13px",
               fontWeight: 500,
-              color: inCart ? "#22c55e" : "hsl(var(--muted-foreground))",
+              color: inCart ? "var(--green)" : "hsl(var(--muted-foreground))",
               transition: "all 0.15s",
             }}
           >

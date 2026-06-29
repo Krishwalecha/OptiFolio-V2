@@ -64,7 +64,7 @@ export default function SavedPanel({
                 ₹{Number(c.monthly).toLocaleString("en-IN")}/mo · {c.rate}% · {c.years}yr
               </span>
               {c.result?.maturity && (
-                <span style={{ fontSize: "11px", color: "#22c55e", fontWeight: 500 }}>
+                <span style={{ fontSize: "11px", color: "var(--green)", fontWeight: 500 }}>
                   → {formatINR(c.result.maturity)}
                 </span>
               )}
@@ -103,7 +103,7 @@ export default function SavedPanel({
                 alignItems: "center",
                 justifyContent: "center",
               }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.1)")}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--red-subtle)")}
               onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
             >
               <Trash2 size={11} style={{ color: "hsl(var(--muted-foreground))" }} />

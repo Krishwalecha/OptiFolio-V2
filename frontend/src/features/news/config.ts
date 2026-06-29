@@ -313,16 +313,16 @@ export const S = {
   positive: {
     label: "Bullish",
     Icon: TrendingUp,
-    color: "#22c55e",
-    dot: "#22c55e",
+    color: "var(--green)",
+    dot: "var(--green)",
   },
   negative: {
     label: "Bearish",
     Icon: TrendingDown,
-    color: "#ef4444",
-    dot: "#ef4444",
+    color: "var(--red)",
+    dot: "var(--red)",
   },
-  neutral: { label: "Neutral", Icon: Minus, color: "#f59e0b", dot: "#f59e0b" },
+  neutral: { label: "Neutral", Icon: Minus, color: "var(--amber)", dot: "var(--amber)" },
   pending: {
     label: "Analyzing",
     Icon: Loader2,
@@ -334,40 +334,40 @@ export const S = {
 export const TREND_CONFIG = {
   strong_buy: {
     label: "Strong Buy",
-    color: "#16a34a",
-    bg: "rgba(22,163,74,0.12)",
-    border: "rgba(22,163,74,0.35)",
+    color: "var(--green)",
+    bg: "var(--green-subtle)",
+    border: "var(--green-border)",
   },
   buy: {
     label: "Buy",
-    color: "#22c55e",
-    bg: "rgba(34,197,94,0.10)",
-    border: "rgba(34,197,94,0.30)",
+    color: "var(--green)",
+    bg: "var(--green-subtle)",
+    border: "var(--green-border)",
   },
   hold: {
     label: "Hold",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.10)",
-    border: "rgba(245,158,11,0.30)",
+    color: "var(--amber)",
+    bg: "var(--amber-subtle)",
+    border: "var(--amber-border)",
   },
   sell: {
     label: "Sell",
-    color: "#f97316",
-    bg: "rgba(249,115,22,0.10)",
-    border: "rgba(249,115,22,0.30)",
+    color: "var(--red)",
+    bg: "var(--red-subtle)",
+    border: "var(--red-border)",
   },
   strong_sell: {
     label: "Strong Sell",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.10)",
-    border: "rgba(239,68,68,0.30)",
+    color: "var(--red)",
+    bg: "var(--red-subtle)",
+    border: "var(--red-border)",
   },
 };
 
 export const CONFIDENCE_CONFIG = {
   low: { label: "Low data", color: "hsl(var(--muted-foreground))", icon: "◌" },
-  medium: { label: "Medium data", color: "#f59e0b", icon: "◑" },
-  high: { label: "High data", color: "#22c55e", icon: "●" },
+  medium: { label: "Medium data", color: "var(--amber)", icon: "◑" },
+  high: { label: "High data", color: "var(--green)", icon: "●" },
 };
 
 export const BATCH = 12;

@@ -130,15 +130,15 @@ export default function MarketIntelligenceOverlay({
                 width: "30px",
                 height: "30px",
                 borderRadius: "8px",
-                background: "rgba(34,197,94,0.12)",
-                border: "1px solid rgba(34,197,94,0.3)",
+                background: "var(--green-subtle)",
+                border: "1px solid var(--green-border)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
               }}
             >
-              <Sparkles size={14} style={{ color: "#22c55e" }} />
+              <Sparkles size={14} style={{ color: "var(--green)" }} />
             </div>
             <div>
               <h2
@@ -178,28 +178,28 @@ export default function MarketIntelligenceOverlay({
           {[
             {
               label: `${buys.length} Buy`,
-              color: "#22c55e",
-              bg: "rgba(34,197,94,0.1)",
-              border: "rgba(34,197,94,0.3)",
+              color: "var(--green)",
+              bg: "var(--green-subtle)",
+              border: "var(--green-border)",
             },
             {
               label: `${holds.length} Hold`,
-              color: "#f59e0b",
-              bg: "rgba(245,158,11,0.1)",
-              border: "rgba(245,158,11,0.3)",
+              color: "var(--amber)",
+              bg: "var(--amber-subtle)",
+              border: "var(--amber-border)",
             },
             {
               label: `${sells.length} Sell`,
-              color: "#ef4444",
-              bg: "rgba(239,68,68,0.1)",
-              border: "rgba(239,68,68,0.3)",
+              color: "var(--red)",
+              bg: "var(--red-subtle)",
+              border: "var(--red-border)",
             },
           ].map(({ label, color, bg, border }) => (
             <span
               key={label}
               style={{
                 fontSize: "11px",
-                fontWeight: 600,
+                fontWeight: 500,
                 padding: "3px 10px",
                 borderRadius: "99px",
                 background: bg,
@@ -221,17 +221,17 @@ export default function MarketIntelligenceOverlay({
               padding: "0 12px",
               background:
                 cart.length > 0
-                  ? "rgba(34,197,94,0.1)"
+                  ? "var(--green-subtle)"
                   : "hsl(var(--card)/0.7)",
               backdropFilter: "blur(8px)",
-              border: `1px solid ${cart.length > 0 ? "rgba(34,197,94,0.35)" : "hsl(var(--border))"}`,
+              border: `1px solid ${cart.length > 0 ? "var(--green-border)" : "hsl(var(--border))"}`,
               borderRadius: "7px",
               cursor: "pointer",
               fontSize: "12px",
               color:
-                cart.length > 0 ? "#22c55e" : "hsl(var(--muted-foreground))",
+                cart.length > 0 ? "var(--green)" : "hsl(var(--muted-foreground))",
               transition: "all 0.12s",
-              fontWeight: cart.length > 0 ? 600 : 400,
+              fontWeight: cart.length > 0 ? 500 : 400,
             }}
           >
             <ShoppingCart size={12} />
@@ -250,13 +250,13 @@ export default function MarketIntelligenceOverlay({
           padding: "9px 13px",
           background: "hsl(var(--card)/0.5)",
           backdropFilter: "blur(8px)",
-          border: "1px solid rgba(245,158,11,0.2)",
-          borderLeft: "3px solid #f59e0b",
+          border: "1px solid var(--amber-border)",
+          borderLeft: "3px solid var(--amber)",
           borderRadius: "8px",
           marginBottom: "12px",
         }}
       >
-        <AlertCircle size={11} style={{ color: "#f59e0b", flexShrink: 0 }} />
+        <AlertCircle size={11} style={{ color: "var(--amber)", flexShrink: 0 }} />
         <p
           style={{
             fontSize: "11px",
@@ -285,12 +285,12 @@ export default function MarketIntelligenceOverlay({
                 alignItems: "center",
                 gap: "8px",
                 padding: "8px 12px",
-                background: "rgba(34,197,94,0.07)",
-                border: "1px solid rgba(34,197,94,0.2)",
+                background: "var(--green-subtle)",
+                border: "1px solid var(--green-border)",
                 borderRadius: "8px",
               }}
             >
-              <Check size={11} style={{ color: "#22c55e", flexShrink: 0 }} />
+              <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />
               <p
                 style={{
                   fontSize: "11.5px",
@@ -298,7 +298,7 @@ export default function MarketIntelligenceOverlay({
                   margin: 0,
                 }}
               >
-                <span style={{ fontWeight: 600, color: "#22c55e" }}>
+                <span style={{ fontWeight: 500, color: "var(--green)" }}>
                   {cart.length} stock{cart.length > 1 ? "s" : ""}
                 </span>{" "}
                 selected:&nbsp;
@@ -306,9 +306,9 @@ export default function MarketIntelligenceOverlay({
                   <span
                     key={t}
                     style={{
-                      fontFamily: "monospace",
+                      fontFamily: "'JetBrains Mono', monospace",
                       fontSize: "11px",
-                      fontWeight: 700,
+                      fontWeight: 500,
                     }}
                   >
                     {t}{" "}
@@ -320,8 +320,8 @@ export default function MarketIntelligenceOverlay({
                 style={{
                   marginLeft: "auto",
                   fontSize: "11px",
-                  color: "#22c55e",
-                  fontWeight: 600,
+                  color: "var(--green)",
+                  fontWeight: 500,
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",

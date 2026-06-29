@@ -206,7 +206,7 @@ export default function SIPCalculator() {
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", flex: 1 }}>
         <Navbar />
-        <main style={{ flex: 1, padding: "56px 24px 80px", maxWidth: "900px", margin: "0 auto", width: "100%" }}>
+        <main style={{ flex: 1, padding: "56px 24px 80px", maxWidth: "1100px", margin: "0 auto", width: "100%" }}>
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}>
 
             {/* Header */}
@@ -541,11 +541,11 @@ export default function SIPCalculator() {
                       <div
                         style={{
                           padding: "12px 20px",
-                          background: result.shortfall > 0 ? "color-mix(in srgb, #ef4444 8%, transparent)" : "color-mix(in srgb, #22c55e 8%, transparent)",
+                          background: result.shortfall > 0 ? "var(--red-subtle)" : "var(--green-subtle)",
                           borderBottom: "1px solid hsl(var(--border))",
                         }}
                       >
-                        <div style={{ fontSize: "13px", fontWeight: 500, color: result.shortfall > 0 ? "#ef4444" : "#22c55e" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 500, color: result.shortfall > 0 ? "var(--red)" : "var(--green)" }}>
                           {result.shortfall > 0 ? "⚠ Shortfall detected" : "✓ Goal achievable"}
                         </div>
                         <div style={{ fontSize: "12px", color: "hsl(var(--muted-foreground))", fontWeight: 300, marginTop: "2px" }}>
@@ -558,10 +558,10 @@ export default function SIPCalculator() {
 
                     {[
                       { label: "Total invested", value: formatINR(result.invested), color: undefined, bold: false },
-                      { label: "Estimated returns", value: formatINR(result.returns), color: "#22c55e", bold: false },
+                      { label: "Estimated returns", value: formatINR(result.returns), color: "var(--green)", bold: false },
                       { label: "Maturity value", value: formatINR(result.maturity), color: undefined, bold: true },
-                      ...(activeTab !== "basic" ? [{ label: `Real value (${inflation}% infl.)`, value: formatINR(result.realMaturity), color: "#f59e0b", bold: false }] : []),
-                      ...(result.mode === "goal" ? [{ label: "Required SIP", value: `${formatINR(result.requiredSIP)}/mo`, color: result.shortfall > 0 ? "#ef4444" : "#22c55e", bold: false }] : []),
+                      ...(activeTab !== "basic" ? [{ label: `Real value (${inflation}% infl.)`, value: formatINR(result.realMaturity), color: "var(--amber)", bold: false }] : []),
+                      ...(result.mode === "goal" ? [{ label: "Required SIP", value: `${formatINR(result.requiredSIP)}/mo`, color: result.shortfall > 0 ? "var(--red)" : "var(--green)", bold: false }] : []),
                     ].map((row, i, arr) => (
                       <div
                         key={row.label}
@@ -679,7 +679,7 @@ export default function SIPCalculator() {
                                             </div>
                                           </div>
                                           <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                            <div style={{ fontSize: "22px", fontWeight: 700, color: "#22c55e", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{fund.cagr5y.toFixed(1)}%</div>
+                                            <div style={{ fontSize: "22px", fontWeight: 500, color: "var(--green)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{fund.cagr5y.toFixed(1)}%</div>
                                             <div style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", fontWeight: 300, marginTop: "3px" }}>5Y CAGR</div>
                                           </div>
                                         </div>
@@ -700,7 +700,7 @@ export default function SIPCalculator() {
                               <p style={{ fontSize: "11px", color: "hsl(var(--muted-foreground))", fontWeight: 300, lineHeight: 1.7, margin: 0 }}>
                                 Funds discovered live from <strong style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>mfapi.in</strong> using AMFI data. Ranked by actual <strong style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>5-year CAGR</strong>. Data cached 24h.
                               </p>
-                              <p style={{ fontSize: "11px", color: "color-mix(in srgb, #f59e0b 80%, hsl(var(--foreground)))", fontWeight: 300, lineHeight: 1.6, margin: "8px 0 0 0" }}>
+                              <p style={{ fontSize: "11px", color: "var(--amber)", fontWeight: 300, lineHeight: 1.6, margin: "8px 0 0 0" }}>
                                 Past returns do not guarantee future performance. Not investment advice.
                               </p>
                             </div>

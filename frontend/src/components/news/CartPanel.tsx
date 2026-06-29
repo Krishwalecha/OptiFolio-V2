@@ -64,7 +64,7 @@ export default function CartPanel({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <ShoppingCart size={15} style={{ color: "#22c55e" }} />
+            <ShoppingCart size={15} style={{ color: "var(--green)" }} />
             <h2
               style={{
                 fontSize: "15px",
@@ -78,12 +78,12 @@ export default function CartPanel({
             <span
               style={{
                 fontSize: "11px",
-                background: "rgba(34,197,94,0.12)",
-                border: "1px solid rgba(34,197,94,0.3)",
-                color: "#22c55e",
+                background: "var(--green-subtle)",
+                border: "1px solid var(--green-border)",
+                color: "var(--green)",
                 borderRadius: "99px",
                 padding: "1px 7px",
-                fontWeight: 700,
+                fontWeight: 500,
               }}
             >
               {cart.length}
@@ -196,8 +196,8 @@ export default function CartPanel({
                           <span
                             style={{
                               fontSize: "13px",
-                              fontWeight: 700,
-                              fontFamily: "monospace",
+                              fontWeight: 500,
+                              fontFamily: "'JetBrains Mono', monospace",
                               color: "hsl(var(--foreground))",
                             }}
                           >

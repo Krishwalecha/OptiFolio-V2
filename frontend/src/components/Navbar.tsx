@@ -66,10 +66,6 @@ const Navbar: React.FC = () => {
         zIndex: 50,
         width: "100%",
         height: "52px",
-        display: "flex",
-        alignItems: "center",
-        paddingLeft: "20px",
-        paddingRight: "20px",
         background: bg,
         backdropFilter: scrolled ? "blur(20px) saturate(180%)" : "none",
         WebkitBackdropFilter: scrolled ? "blur(20px) saturate(180%)" : "none",
@@ -77,6 +73,17 @@ const Navbar: React.FC = () => {
         transition: "background 0.2s ease, border-color 0.2s ease",
       }}
     >
+      <div
+        style={{
+          maxWidth: "1100px",
+          margin: "0 auto",
+          padding: "0 24px",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          position: "relative",
+        }}
+      >
       {/* Logo */}
       <Link
         to="/"
@@ -152,8 +159,8 @@ const Navbar: React.FC = () => {
                     ? "#f0f0f0"
                     : "#0d0d0d"
                   : isDark
-                    ? "rgba(240,240,240,0.38)"
-                    : "rgba(13,13,13,0.38)",
+                    ? "rgba(240,240,240,0.48)"
+                    : "rgba(13,13,13,0.48)",
                 background: isActive
                   ? isDark
                     ? "rgba(255,255,255,0.07)"
@@ -174,8 +181,8 @@ const Navbar: React.FC = () => {
               onMouseLeave={(e) => {
                 if (!isActive) {
                   (e.currentTarget as HTMLElement).style.color = isDark
-                    ? "rgba(240,240,240,0.38)"
-                    : "rgba(13,13,13,0.38)";
+                    ? "rgba(240,240,240,0.48)"
+                    : "rgba(13,13,13,0.48)";
                   (e.currentTarget as HTMLElement).style.background =
                     "transparent";
                 }
@@ -376,14 +383,14 @@ const Navbar: React.FC = () => {
                     textAlign: "left",
                     fontSize: "13px",
                     letterSpacing: "-0.01em",
-                    color: "#ef4444",
+                    color: "var(--red)",
                     fontWeight: 400,
                     transition: "background 0.12s ease",
                     fontFamily: "'Inter', sans-serif",
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.background =
-                      "rgba(239,68,68,0.07)";
+                      "var(--red-subtle)";
                   }}
                   onMouseLeave={(e) => {
                     (e.currentTarget as HTMLElement).style.background =
@@ -396,6 +403,7 @@ const Navbar: React.FC = () => {
             )}
           </div>
         )}
+      </div>
       </div>
     </header>
   );

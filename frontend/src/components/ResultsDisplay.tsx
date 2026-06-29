@@ -124,7 +124,7 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, onSave, isSavin
             {onSave && (
               saved ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", background: "hsl(var(--card) / 0.6)", border: "1px solid hsl(var(--border))", borderRadius: "7px", fontSize: "13px", color: "hsl(var(--muted-foreground))" }}>
-                  <CheckCircle2 size={13} style={{ color: "#22c55e" }} /> Saved
+                  <CheckCircle2 size={13} style={{ color: "var(--green)" }} /> Saved
                 </div>
               ) : (
                 <button
@@ -150,38 +150,38 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, onSave, isSavin
         {/* Metrics row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderBottom: "1px solid hsl(var(--border))" }}>
           {metrics.map((m, i) => (
-            <div key={m.label} style={{ padding: "24px", borderRight: i < metrics.length - 1 ? "1px solid hsl(var(--border))" : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "10px" }}>
+            <div key={m.label} style={{ padding: "22px 24px", borderRight: i < metrics.length - 1 ? "1px solid hsl(var(--border))" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "12px" }}>
                 {m.icon && <span style={{ color: m.color }}>{m.icon}</span>}
                 <span className="mono-label">{m.label}</span>
               </div>
-              <div style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "2rem", letterSpacing: "-0.03em", lineHeight: 1, color: m.color, marginBottom: "6px" }}>
+              <div style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "2.1rem", letterSpacing: "-0.03em", lineHeight: 1, color: m.color, marginBottom: "8px" }}>
                 {m.value}
               </div>
-              <div style={{ fontSize: "12px", color: "hsl(var(--muted-foreground))", fontWeight: 300 }}>{m.sub}</div>
+              <div style={{ fontSize: "12px", color: "hsl(var(--muted-foreground))", fontWeight: 300, letterSpacing: "-0.005em" }}>{m.sub}</div>
             </div>
           ))}
         </div>
 
         {/* Allocation breakdown */}
-        <div style={{ padding: "24px" }}>
-          <p className="mono-label" style={{ marginBottom: "20px" }}>Allocation breakdown</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ padding: "22px 24px 24px" }}>
+          <p className="mono-label" style={{ marginBottom: "18px" }}>Allocation breakdown</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             {sortedAlloc.map((item, i) => (
               <motion.div key={item.ticker} custom={i} initial="hidden" animate="show" variants={fadeUp}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "7px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "13px", fontWeight: 500, letterSpacing: "0.02em", color: "hsl(var(--foreground))" }}>
                       {item.ticker}
                     </span>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: "hsl(var(--muted-foreground))" }}>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: "hsl(var(--muted-foreground))", letterSpacing: "0.03em" }}>
                       {item.weight_pct.toFixed(1)}%
                     </span>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "hsl(var(--muted-foreground))", opacity: 0.6 }}>
-                      {item.shares} shares @ ₹{item.price_inr.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10.5px", color: "hsl(var(--muted-foreground))", opacity: 0.55 }}>
+                      {item.shares} sh · ₹{item.price_inr.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "13px", color: "hsl(var(--foreground))", letterSpacing: "-0.01em" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "12.5px", color: "hsl(var(--foreground))", letterSpacing: "-0.01em", fontWeight: 500 }}>
                     ₹{Math.round(item.invested_inr).toLocaleString("en-IN")}
                   </span>
                 </div>
@@ -280,11 +280,11 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, onSave, isSavin
                       padding: "14px 16px", background: "hsl(var(--secondary) / 0.5)", backdropFilter: "blur(8px)",
                       border: "1px solid hsl(var(--border))", borderRadius: "8px",
                     }}>
-                      <div className="mono-label" style={{ marginBottom: "6px" }}>{m.label}</div>
-                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "16px", fontWeight: 600, color: m.color, marginBottom: "5px", letterSpacing: "-0.01em" }}>
+                      <div className="mono-label" style={{ marginBottom: "8px" }}>{m.label}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "15px", fontWeight: 600, color: m.color, marginBottom: "6px", letterSpacing: "-0.01em" }}>
                         {m.value}
                       </div>
-                      <div style={{ fontSize: "10.5px", color: "hsl(var(--muted-foreground))", fontWeight: 300, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: "11px", color: "hsl(var(--muted-foreground))", fontWeight: 300, lineHeight: 1.5 }}>
                         {m.desc}
                       </div>
                     </div>
@@ -353,11 +353,11 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, onSave, isSavin
                       padding: "14px 16px", background: "hsl(var(--secondary) / 0.5)", backdropFilter: "blur(8px)",
                       border: "1px solid hsl(var(--border))", borderRadius: "8px",
                     }}>
-                      <div className="mono-label" style={{ marginBottom: "6px" }}>{m.label}</div>
-                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "16px", fontWeight: 600, color: m.color, marginBottom: "5px", letterSpacing: "-0.01em" }}>
+                      <div className="mono-label" style={{ marginBottom: "8px" }}>{m.label}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "15px", fontWeight: 600, color: m.color, marginBottom: "6px", letterSpacing: "-0.01em" }}>
                         {m.value}
                       </div>
-                      <div style={{ fontSize: "10.5px", color: "hsl(var(--muted-foreground))", fontWeight: 300, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: "11px", color: "hsl(var(--muted-foreground))", fontWeight: 300, lineHeight: 1.5 }}>
                         {m.desc}
                       </div>
                     </div>

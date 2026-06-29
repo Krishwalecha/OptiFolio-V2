@@ -36,7 +36,7 @@ export default function BreakdownChart({
             <span style={{ fontSize: "10.5px", color: "hsl(var(--muted-foreground))" }}>
               Invested: <strong style={{ color: "hsl(var(--foreground))" }}>{formatINR(hd.invested)}</strong>
             </span>
-            <span style={{ fontSize: "10.5px", color: "#22c55e" }}>
+            <span style={{ fontSize: "10.5px", color: "var(--green)" }}>
               Returns: <strong>{formatINR(hd.maturity - hd.invested)}</strong>
             </span>
             <span style={{ fontSize: "10.5px", fontWeight: 600, color: "hsl(var(--foreground))" }}>
@@ -78,12 +78,12 @@ export default function BreakdownChart({
                     width: "100%",
                     height: `${matH}px`,
                     background: isHov
-                      ? "color-mix(in srgb, #22c55e 30%, transparent)"
-                      : "color-mix(in srgb, #22c55e 15%, transparent)",
+                      ? "color-mix(in srgb, var(--green) 30%, transparent)"
+                      : "color-mix(in srgb, var(--green) 15%, transparent)",
                     borderRadius: "3px 3px 0 0",
                     border: isHov
-                      ? "1px solid color-mix(in srgb, #22c55e 50%, transparent)"
-                      : "1px solid color-mix(in srgb, #22c55e 20%, transparent)",
+                      ? "1px solid color-mix(in srgb, var(--green) 50%, transparent)"
+                      : "1px solid color-mix(in srgb, var(--green) 20%, transparent)",
                     transition: "background 0.1s ease, border-color 0.1s ease",
                   }}
                 />
@@ -117,7 +117,7 @@ export default function BreakdownChart({
       <div style={{ display: "flex", gap: "14px", marginTop: "10px" }}>
         {[
           { c: "hsl(var(--secondary))", b: "hsl(var(--border))", l: "Invested" },
-          { c: "color-mix(in srgb, #22c55e 22%, transparent)", b: "color-mix(in srgb, #22c55e 38%, transparent)", l: "Returns" },
+          { c: "color-mix(in srgb, var(--green) 22%, transparent)", b: "color-mix(in srgb, var(--green) 38%, transparent)", l: "Returns" },
         ].map((x) => (
           <div key={x.l} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <div style={{ width: "10px", height: "10px", borderRadius: "2px", background: x.c, border: `1px solid ${x.b}` }} />

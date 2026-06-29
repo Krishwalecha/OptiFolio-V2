@@ -46,8 +46,8 @@ export default function StockCard({ stock, index, onDelete }: StockCardProps) {
               width: "28px",
               height: "28px",
               borderRadius: "6px",
-              background: "rgba(239,68,68,0.12)",
-              border: "1px solid rgba(239,68,68,0.3)",
+              background: "var(--red-subtle)",
+              border: "1px solid var(--red-border)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -56,13 +56,13 @@ export default function StockCard({ stock, index, onDelete }: StockCardProps) {
               transition: "background 0.12s ease",
             }}
             onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.25)")
+              ((e.currentTarget as HTMLElement).style.background = "var(--red-subtle)")
             }
             onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.12)")
+              ((e.currentTarget as HTMLElement).style.background = "var(--red-subtle)")
             }
           >
-            <Trash2 size={12} style={{ color: "#ef4444" }} />
+            <Trash2 size={12} style={{ color: "var(--red)" }} />
           </motion.button>
         )}
       </AnimatePresence>

@@ -16,17 +16,18 @@ const Footer: React.FC = () => {
   ];
 
   return (
-    <footer
-      style={{
-        borderTop: "1px solid hsl(var(--border))",
-        padding: "20px 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: "12px",
-      }}
-    >
+    <footer style={{ borderTop: "1px solid hsl(var(--border))" }}>
+      <div
+        style={{
+          maxWidth: "1100px",
+          margin: "0 auto",
+          padding: "20px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          position: "relative",
+        }}
+      >
       {/* Wordmark */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -67,8 +68,8 @@ const Footer: React.FC = () => {
         </span>
       </div>
 
-      {/* Nav links */}
-      <nav style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+      {/* Nav links — absolutely centered like Navbar */}
+      <nav style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "2px" }}>
         {links.map((l) => (
           <Link
             key={l.path}
@@ -109,6 +110,7 @@ const Footer: React.FC = () => {
       >
         © {year} OptiFolio · Not financial advice
       </span>
+      </div>
     </footer>
   );
 };

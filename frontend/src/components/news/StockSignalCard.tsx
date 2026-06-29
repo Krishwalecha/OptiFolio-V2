@@ -38,10 +38,10 @@ export default function StockSignalCard({
   const neutW = 100 - bullW - bearW;
   const pctColor =
     signal.trend === "strong_buy" || signal.trend === "buy"
-      ? "#22c55e"
+      ? "var(--green)"
       : signal.trend === "strong_sell" || signal.trend === "sell"
-        ? "#ef4444"
-        : "#f59e0b";
+        ? "var(--red)"
+        : "var(--amber)";
   const noData = signal.totalMentions === 0;
   const rankColors = ["#f59e0b", "#94a3b8", "#b45309"];
 
@@ -55,7 +55,7 @@ export default function StockSignalCard({
         position: "relative",
         background: inCart ? "hsl(var(--card)/0.85)" : "hsl(var(--card)/0.6)",
         backdropFilter: "blur(16px)",
-        border: `1px solid ${inCart ? "rgba(34,197,94,0.45)" : "hsl(var(--border))"}`,
+        border: `1px solid ${inCart ? "var(--green-border)" : "hsl(var(--border))"}`,
         borderTop: `3px solid ${noData ? "hsl(var(--border))" : tc.color}`,
         borderRadius: "14px",
         padding: "18px 18px 16px",
@@ -67,7 +67,7 @@ export default function StockSignalCard({
         gap: "14px",
         opacity: noData ? 0.55 : 1,
         boxShadow: inCart
-          ? `0 0 0 1px rgba(34,197,94,0.2), 0 8px 24px rgba(0,0,0,0.12)`
+          ? `0 0 0 1px var(--green-border), 0 8px 24px rgba(0,0,0,0.12)`
           : "0 2px 12px rgba(0,0,0,0.06)",
         minHeight: "200px",
       }}
@@ -100,8 +100,8 @@ export default function StockSignalCard({
           width: "28px",
           height: "28px",
           borderRadius: "8px",
-          background: inCart ? "rgba(34,197,94,0.2)" : "hsl(var(--secondary))",
-          border: `1px solid ${inCart ? "rgba(34,197,94,0.5)" : "hsl(var(--border))"}`,
+          background: inCart ? "var(--green-subtle)" : "hsl(var(--secondary))",
+          border: `1px solid ${inCart ? "var(--green-border)" : "hsl(var(--border))"}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -112,7 +112,7 @@ export default function StockSignalCard({
         }}
       >
         {inCart ? (
-          <Check size={12} style={{ color: "#22c55e" }} />
+          <Check size={12} style={{ color: "var(--green)" }} />
         ) : (
           <Plus size={12} style={{ color: "hsl(var(--muted-foreground))" }} />
         )}
@@ -129,11 +129,11 @@ export default function StockSignalCard({
         >
           <span
             style={{
-              fontSize: "15px",
-              fontWeight: 800,
-              fontFamily: "monospace",
+              fontSize: "14px",
+              fontWeight: 500,
+              fontFamily: "'JetBrains Mono', monospace",
               color: "hsl(var(--foreground))",
-              letterSpacing: "0.05em",
+              letterSpacing: "0.04em",
             }}
           >
             {signal.ticker}
@@ -142,7 +142,7 @@ export default function StockSignalCard({
             <span
               style={{
                 fontSize: "9px",
-                fontWeight: 700,
+                fontWeight: 500,
                 color: rankColors[rank],
                 background: `${rankColors[rank]}18`,
                 border: `1px solid ${rankColors[rank]}40`,
@@ -184,8 +184,9 @@ export default function StockSignalCard({
           {noData ? (
             <p
               style={{
+                fontFamily: "'Instrument Serif', Georgia, serif",
                 fontSize: "32px",
-                fontWeight: 700,
+                fontWeight: 400,
                 color: "hsl(var(--muted-foreground))",
                 margin: 0,
                 lineHeight: 1,
@@ -198,12 +199,13 @@ export default function StockSignalCard({
             <>
               <p
                 style={{
-                  fontSize: "36px",
-                  fontWeight: 800,
+                  fontFamily: "'Instrument Serif', Georgia, serif",
+                  fontSize: "34px",
+                  fontWeight: 400,
                   color: pctColor,
                   margin: "0 0 2px 0",
                   lineHeight: 1,
-                  letterSpacing: "-0.04em",
+                  letterSpacing: "-0.03em",
                 }}
               >
                 {signal.bullishPct}%
@@ -233,7 +235,7 @@ export default function StockSignalCard({
             style={{
               display: "inline-block",
               fontSize: "11px",
-              fontWeight: 700,
+              fontWeight: 500,
               padding: "4px 10px",
               borderRadius: "99px",
               background: noData ? "hsl(var(--secondary))" : tc.bg,
@@ -277,21 +279,21 @@ export default function StockSignalCard({
               <div
                 style={{
                   width: `${bullW}%`,
-                  background: "#22c55e",
+                  background: "var(--green)",
                   transition: "width 1s ease",
                 }}
               />
               <div
                 style={{
                   width: `${bearW}%`,
-                  background: "#ef4444",
+                  background: "var(--red)",
                   transition: "width 1s ease",
                 }}
               />
               <div
                 style={{
                   width: `${neutW}%`,
-                  background: "#f59e0b",
+                  background: "var(--amber)",
                   opacity: 0.5,
                   transition: "width 1s ease",
                 }}
@@ -318,9 +320,9 @@ export default function StockSignalCard({
                   alignItems: "center",
                   gap: "3px",
                   fontSize: "11px",
-                  color: "#22c55e",
-                  fontWeight: 600,
-                  background: "rgba(34,197,94,0.1)",
+                  color: "var(--green)",
+                  fontWeight: 500,
+                  background: "var(--green-subtle)",
                   borderRadius: "5px",
                   padding: "2px 7px",
                 }}
@@ -335,9 +337,9 @@ export default function StockSignalCard({
                   alignItems: "center",
                   gap: "3px",
                   fontSize: "11px",
-                  color: "#ef4444",
-                  fontWeight: 600,
-                  background: "rgba(239,68,68,0.1)",
+                  color: "var(--red)",
+                  fontWeight: 500,
+                  background: "var(--red-subtle)",
                   borderRadius: "5px",
                   padding: "2px 7px",
                 }}
@@ -352,9 +354,9 @@ export default function StockSignalCard({
                   alignItems: "center",
                   gap: "3px",
                   fontSize: "11px",
-                  color: "#f59e0b",
-                  fontWeight: 600,
-                  background: "rgba(245,158,11,0.1)",
+                  color: "var(--amber)",
+                  fontWeight: 500,
+                  background: "var(--amber-subtle)",
                   borderRadius: "5px",
                   padding: "2px 7px",
                 }}

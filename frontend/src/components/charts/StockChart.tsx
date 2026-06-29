@@ -188,7 +188,7 @@ const StockChart: React.FC<StockChartProps> = ({ ticker, allocation, investedInr
         onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "hsl(var(--card) / 0.6)"; el.style.borderColor = "hsl(var(--border))"; el.style.boxShadow = "none"; }}
       >
         {/* Header */}
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid hsl(var(--border))", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ padding: "15px 18px", borderBottom: "1px solid hsl(var(--border))", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "3px" }}>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "13px", fontWeight: 500, letterSpacing: "0.04em", color: "hsl(var(--foreground))" }}>{ticker}</span>
@@ -233,9 +233,9 @@ const StockChart: React.FC<StockChartProps> = ({ ticker, allocation, investedInr
             { label: "Low",     value: `₹${low.toLocaleString("en-IN")}`,   color: "var(--red)"   },
             { label: "Avg Vol", value: `${(avgVol / 1000).toFixed(0)}K`,    color: "var(--amber)" },
           ].map((s, i) => (
-            <div key={s.label} style={{ padding: "10px 14px", textAlign: "center", borderRight: i < 2 ? "1px solid hsl(var(--border))" : "none" }}>
-              <div className="mono-label" style={{ marginBottom: "3px" }}>{s.label}</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", fontWeight: 500, color: s.color }}>{s.value}</div>
+            <div key={s.label} style={{ padding: "11px 14px", textAlign: "center", borderRight: i < 2 ? "1px solid hsl(var(--border))" : "none" }}>
+              <div className="mono-label" style={{ marginBottom: "4px" }}>{s.label}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11.5px", fontWeight: 500, color: s.color }}>{s.value}</div>
             </div>
           ))}
         </div>

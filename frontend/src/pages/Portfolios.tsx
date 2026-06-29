@@ -322,7 +322,7 @@ const Portfolios: React.FC = () => {
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDeleteSessionConfirm}
-                style={{ height: "36px", padding: "0 14px", background: "#ef4444", border: "none", borderRadius: "7px", fontSize: "13px", fontWeight: 500, cursor: "pointer", color: "#fff", fontFamily: "'Inter', sans-serif" }}
+                style={{ height: "36px", padding: "0 14px", background: "var(--red)", border: "none", borderRadius: "7px", fontSize: "13px", fontWeight: 500, cursor: "pointer", color: "hsl(var(--background))", fontFamily: "'Inter', sans-serif" }}
               >
                 <Trash2 size={12} style={{ marginRight: "5px" }} /> Delete session
               </AlertDialogAction>
@@ -355,7 +355,7 @@ const Portfolios: React.FC = () => {
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDeleteConfirm}
-                style={{ height: "36px", padding: "0 14px", background: "#ef4444", border: "none", borderRadius: "7px", fontSize: "13px", fontWeight: 500, cursor: "pointer", color: "#fff", fontFamily: "'Inter', sans-serif" }}
+                style={{ height: "36px", padding: "0 14px", background: "var(--red)", border: "none", borderRadius: "7px", fontSize: "13px", fontWeight: 500, cursor: "pointer", color: "hsl(var(--background))", fontFamily: "'Inter', sans-serif" }}
               >
                 <Trash2 size={12} style={{ marginRight: "5px" }} /> Remove
               </AlertDialogAction>

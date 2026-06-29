@@ -45,7 +45,7 @@ export default function PortfolioSessionGroup({
           display: "flex",
           alignItems: "center",
           gap: "10px",
-          padding: "14px 18px",
+          padding: "15px 20px",
           background: headerHovered
             ? "hsl(var(--secondary) / 0.6)"
             : "hsl(var(--card) / 0.5)",
@@ -157,9 +157,9 @@ export default function PortfolioSessionGroup({
           }}
           onMouseEnter={(e) => {
             const el = e.currentTarget as HTMLElement;
-            el.style.background = "rgba(239,68,68,0.1)";
-            el.style.borderColor = "rgba(239,68,68,0.4)";
-            el.style.color = "#ef4444";
+            el.style.background = "var(--red-subtle)";
+            el.style.borderColor = "var(--red-border)";
+            el.style.color = "var(--red)";
           }}
           onMouseLeave={(e) => {
             const el = e.currentTarget as HTMLElement;
@@ -185,7 +185,7 @@ export default function PortfolioSessionGroup({
           >
             <div
               style={{
-                padding: "20px",
+                padding: "20px 24px 24px",
                 background: "hsl(var(--card) / 0.3)",
               }}
             >

@@ -72,12 +72,12 @@ export default function HybridPanel({ rate, years }: { rate: string; years: stri
         </div>
         <div style={{ height: "6px", borderRadius: "99px", overflow: "hidden", display: "flex", marginBottom: "8px" }}>
           <div style={{ width: `${lsPct}%`, background: "#8b5cf6", transition: "width 0.5s ease" }} />
-          <div style={{ width: `${sipPct}%`, background: "#22c55e", transition: "width 0.5s ease" }} />
+          <div style={{ width: `${sipPct}%`, background: "var(--green)", transition: "width 0.5s ease" }} />
         </div>
         <div style={{ display: "flex", gap: "16px" }}>
           {[
             { color: "#8b5cf6", label: `Lumpsum ${lsPct}%`, val: formatINR(ls) },
-            { color: "#22c55e", label: `SIP ${sipPct}%`, val: formatINR(s * n) },
+            { color: "var(--green)", label: `SIP ${sipPct}%`, val: formatINR(s * n) },
           ].map((x) => (
             <div key={x.label} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
               <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: x.color, flexShrink: 0 }} />
@@ -92,7 +92,7 @@ export default function HybridPanel({ rate, years }: { rate: string; years: stri
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
         {[
           { label: "Lumpsum grows to", val: formatINR(lumpsumMaturity), color: "#8b5cf6", bold: false },
-          { label: "SIP grows to", val: formatINR(sipMaturity), color: "#22c55e", bold: false },
+          { label: "SIP grows to", val: formatINR(sipMaturity), color: "var(--green)", bold: false },
           { label: "Total maturity", val: formatINR(totalMaturity), color: "hsl(var(--foreground))", bold: true },
         ].map((x) => (
           <div
@@ -120,9 +120,9 @@ export default function HybridPanel({ rate, years }: { rate: string; years: stri
           display: "flex",
           justifyContent: "space-between",
           padding: "12px 16px",
-          background: "rgba(34,197,94,0.07)",
+          background: "var(--green-subtle)",
           borderRadius: "7px",
-          border: "1px solid rgba(34,197,94,0.2)",
+          border: "1px solid var(--green-border)",
         }}
       >
         <span style={{ fontSize: "12.5px", color: "hsl(var(--muted-foreground))", fontWeight: 300 }}>
