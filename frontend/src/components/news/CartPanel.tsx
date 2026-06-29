@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, X, Trash2, Zap, ArrowRight } from "lucide-react";
+import { ShoppingCart, X, Trash2 } from "lucide-react";
 import { TREND_CONFIG, Z } from "@/features/news/config";
 import type { StockSignal } from "@/features/news/types";
 
@@ -32,7 +32,6 @@ export default function CartPanel({
           inset: 0,
           background: "rgba(0,0,0,0.4)",
           zIndex: Z.signalBackdrop,
-          backdropFilter: "blur(4px)",
         }}
       />
       <motion.div
@@ -64,28 +63,18 @@ export default function CartPanel({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <ShoppingCart size={15} style={{ color: "var(--green)" }} />
-            <h2
-              style={{
-                fontSize: "15px",
-                fontWeight: 600,
-                margin: 0,
-                color: "hsl(var(--foreground))",
-              }}
-            >
+            <ShoppingCart size={14} style={{ color: "hsl(var(--muted-foreground))" }} />
+            <h2 style={{ fontSize: "14px", fontWeight: 500, margin: 0, color: "hsl(var(--foreground))" }}>
               Optimizer Cart
             </h2>
-            <span
-              style={{
-                fontSize: "11px",
-                background: "var(--green-subtle)",
-                border: "1px solid var(--green-border)",
-                color: "var(--green)",
-                borderRadius: "99px",
-                padding: "1px 7px",
-                fontWeight: 500,
-              }}
-            >
+            <span style={{
+              fontSize: "11px",
+              background: "hsl(var(--secondary))",
+              border: "1px solid hsl(var(--border))",
+              color: "hsl(var(--muted-foreground))",
+              borderRadius: "99px",
+              padding: "1px 7px",
+            }}>
               {cart.length}
             </span>
           </div>
@@ -179,12 +168,24 @@ export default function CartPanel({
                         alignItems: "center",
                         gap: "10px",
                         padding: "10px 12px",
-                        background: "hsl(var(--card)/0.6)",
+                        background: "hsl(var(--card))",
                         border: "1px solid hsl(var(--border))",
-                        borderLeft: `3px solid ${sig ? tc.color : "hsl(var(--border))"}`,
                         borderRadius: "8px",
+                        position: "relative",
+                        overflow: "hidden",
                       }}
                     >
+                      {sig && (
+                        <div style={{
+                          position: "absolute",
+                          left: 0,
+                          top: "6px",
+                          bottom: "6px",
+                          width: "2px",
+                          borderRadius: "0 2px 2px 0",
+                          background: tc.color,
+                        }} />
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           style={{
@@ -293,37 +294,21 @@ export default function CartPanel({
             onClick={onGoToOptimizer}
             disabled={cart.length === 0}
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
               width: "100%",
-              padding: "11px",
-              background:
-                cart.length === 0
-                  ? "hsl(var(--muted)/0.6)"
-                  : "hsl(var(--foreground))",
-              color:
-                cart.length === 0
-                  ? "hsl(var(--muted-foreground))"
-                  : "hsl(var(--background))",
-              border: "none",
-              borderRadius: "8px",
+              padding: "10px",
+              background: cart.length === 0 ? "hsl(var(--secondary))" : "hsl(var(--foreground))",
+              color: cart.length === 0 ? "hsl(var(--muted-foreground))" : "hsl(var(--background))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "7px",
               cursor: cart.length === 0 ? "not-allowed" : "pointer",
               fontSize: "13px",
-              fontWeight: 600,
+              fontWeight: 500,
               transition: "opacity 0.12s",
             }}
-            onMouseEnter={(e) => {
-              if (cart.length > 0)
-                (e.currentTarget as HTMLElement).style.opacity = "0.82";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.opacity = "1";
-            }}
+            onMouseEnter={(e) => { if (cart.length > 0) (e.currentTarget as HTMLElement).style.opacity = "0.8"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
           >
-            <Zap size={14} /> Go to Optimizer ({cart.length} stocks){" "}
-            <ArrowRight size={13} />
+            Open Optimizer
           </button>
         </div>
       </motion.div>

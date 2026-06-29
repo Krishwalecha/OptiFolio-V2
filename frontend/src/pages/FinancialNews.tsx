@@ -22,9 +22,6 @@ import {
   toTitleCase,
   CACHE_KEY,
   PORTFOLIO_CACHE_KEY,
-  GENERAL_NEWSDATA_QUERIES,
-  GENERAL_GNEWS_QUERIES,
-  RSS_FEEDS,
   normalizeNseTicker,
 } from "@/features/news/config";
 import {
@@ -35,14 +32,13 @@ import {
   cacheIsValid,
   cacheAge,
   dedup,
-  fetchRssViaProxy,
-  fetchNewsData,
-  fetchGNews,
+  fetchGeneralNews,
   fetchPortfolioNews,
-  resolveTickerNames,
   fetchUserTickers,
   computeStockSignals,
   analyzeWithAI,
+  resolveTickerNames,
+  resolveStockNames,
 } from "@/features/news/utils";
 
 import ArticleDrawer from "@/components/news/ArticleDrawer";
@@ -204,6 +200,27 @@ export default function FinancialNews() {
       }
     }
     setIsAnalyzing(false);
+
+    // Resolve AI-returned company names → proper NSE tickers + company names
+    const rawNames = [...new Set(
+      finalArticles.flatMap((a) => a.stocks).filter((n) => n && n.length >= 2)
+    )];
+    if (rawNames.length > 0) {
+      resolveStockNames(rawNames).then((resolved) => {
+        // Remap article.stocks from raw names to proper NSE tickers
+        setArticles((prev) => prev.map((a) => ({
+          ...a,
+          stocks: [...new Set(a.stocks.map((s) => resolved[s.trim().toUpperCase()]?.ticker ?? s))],
+        })));
+        // Build tickerName map from resolved data
+        const nameMap: Record<string, string> = {};
+        for (const { ticker, companyName } of Object.values(resolved)) {
+          if (ticker && companyName) nameMap[ticker] = companyName;
+        }
+        setTickerNames((prev) => ({ ...prev, ...nameMap }));
+      });
+    }
+
     setTimeout(() => {
       setArticles((latest) => {
         writeCache(latest, cacheKey);
@@ -227,42 +244,10 @@ export default function FinancialNews() {
     setPortfolioTickers([]);
 
     try {
-      const rssPromises = RSS_FEEDS.map((f) => fetchRssViaProxy(f));
-      const ndPromises = GENERAL_NEWSDATA_QUERIES.map(
-        ({ q, category }, i) =>
-          new Promise<Article[]>((resolve) =>
-            setTimeout(() => fetchNewsData(q, category).then(resolve), i * 200),
-          ),
-      );
-      const gnewsAll = async () => {
-        const all: Article[] = [];
-        for (const q of GENERAL_GNEWS_QUERIES) {
-          all.push(...(await fetchGNews(q)));
-        }
-        return all;
-      };
-      const [rssR, ndR, gnR] = await Promise.all([
-        Promise.allSettled(rssPromises).then((rs) =>
-          rs
-            .filter((r) => r.status === "fulfilled")
-            .flatMap((r) => (r as PromiseFulfilledResult<Article[]>).value),
-        ),
-        Promise.allSettled(ndPromises).then((rs) =>
-          rs
-            .filter((r) => r.status === "fulfilled")
-            .flatMap((r) => (r as PromiseFulfilledResult<Article[]>).value),
-        ),
-        gnewsAll(),
-      ]);
-      const pool = [...rssR, ...ndR, ...gnR].sort(
-        (a, b) =>
-          new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
-      );
-      const clean = dedup(pool);
+      const articles = await fetchGeneralNews();
+      const clean = dedup(articles);
       if (!clean.length) {
-        setError(
-          "No articles retrieved. Check your backend server is running on port 5000.",
-        );
+        setError("No articles retrieved. Check your backend server is running.");
         setIsFetching(false);
         return;
       }
@@ -303,10 +288,9 @@ export default function FinancialNews() {
       setUserTickers(tickers);
       setPortfolioTickers(tickers);
       setIsResolvingNames(true);
-      const nameMap = await resolveTickerNames(tickers);
+      const { articles: raw, nameMap } = await fetchPortfolioNews(tickers);
       setTickerNames(nameMap);
       setIsResolvingNames(false);
-      const raw = await fetchPortfolioNews(tickers, nameMap);
       const clean = dedup(raw);
       if (!clean.length) {
         setError("No news found for your portfolio stocks.");
@@ -393,7 +377,7 @@ export default function FinancialNews() {
   const intelligenceReady =
     !isAnalyzing &&
     !isFetching &&
-    stockSignals.length > 0 &&
+    articles.some((a) => a.analyzed) &&
     (mode !== "portfolio" || portfolioTickers.length > 0);
 
   return (
@@ -443,11 +427,9 @@ export default function FinancialNews() {
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
           @keyframes pulse-dot { 0%,100%{opacity:1}50%{opacity:0.3} }
-          @keyframes intel-pulse { 0%,100%{box-shadow:0 0 0 0 transparent} 50%{box-shadow:0 0 0 5px var(--green-subtle)} }
           .filter-tab:hover { color: hsl(var(--foreground)) !important; }
           .article-row:hover { background: hsl(var(--secondary)/0.8) !important; }
           .mode-btn:hover { opacity: 1 !important; }
-          .intel-pulse { animation: intel-pulse 2.8s ease-in-out infinite; }
         `}</style>
 
         <main style={{ flex: 1 }}>
@@ -589,8 +571,7 @@ export default function FinancialNews() {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "6px",
-                      background: "hsl(var(--card)/0.7)",
-                      backdropFilter: "blur(8px)",
+                      background: "hsl(var(--secondary))",
                       border: "1px solid hsl(var(--border))",
                       borderRadius: "7px",
                       cursor:
@@ -641,8 +622,7 @@ export default function FinancialNews() {
                       background:
                         mode === "general"
                           ? "hsl(var(--foreground))"
-                          : "hsl(var(--card)/0.7)",
-                      backdropFilter: "blur(8px)",
+                          : "hsl(var(--secondary))",
                       border: `1px solid ${mode === "general" ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
                       borderRadius: "7px",
                       fontSize: "13px",
@@ -674,8 +654,7 @@ export default function FinancialNews() {
                       background:
                         mode === "portfolio"
                           ? "hsl(var(--foreground))"
-                          : "hsl(var(--card)/0.7)",
-                      backdropFilter: "blur(8px)",
+                          : "hsl(var(--secondary))",
                       border: `1px solid ${mode === "portfolio" ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
                       borderRadius: "7px",
                       fontSize: "13px",
@@ -715,117 +694,88 @@ export default function FinancialNews() {
                         alignItems: "center",
                         gap: "6px",
                         padding: "7px 14px",
-                        background: "var(--green-subtle)",
-                        backdropFilter: "blur(8px)",
-                        border: "1px solid var(--green-border)",
-                        borderRadius: "8px",
+                        background: "hsl(var(--secondary))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "7px",
                         cursor: "pointer",
                         fontSize: "13px",
-                        fontWeight: 500,
-                        color: "var(--green)",
+                        fontWeight: 400,
+                        color: "hsl(var(--foreground))",
                         transition: "all 0.15s",
                       }}
                     >
                       <ShoppingCart size={13} />
-                      {cart.length} stock{cart.length > 1 ? "s" : ""} →
-                      Optimizer
+                      {cart.length} stock{cart.length > 1 ? "s" : ""}
                     </motion.button>
                   )}
 
                   <AnimatePresence>
                     {(intelligenceReady || isAnalyzing) && (
                       <motion.button
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ duration: 0.18 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
                         onClick={() => {
                           if (intelligenceReady) setShowIntelligence((v) => !v);
                         }}
                         disabled={isAnalyzing}
-                        className={
-                          intelligenceReady && !showIntelligence
-                            ? "intel-pulse"
-                            : ""
-                        }
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "8px",
-                          padding: "7px 16px",
+                          gap: "7px",
+                          padding: "7px 14px",
                           background: showIntelligence
                             ? "hsl(var(--foreground))"
-                            : intelligenceReady
-                              ? "linear-gradient(135deg,var(--green-subtle),var(--blue-subtle))"
-                              : "hsl(var(--card)/0.7)",
-                          backdropFilter: "blur(8px)",
-                          border: `1px solid ${showIntelligence ? "hsl(var(--foreground))" : intelligenceReady ? "var(--green-border)" : "hsl(var(--border))"}`,
-                          borderRadius: "8px",
+                            : "hsl(var(--secondary))",
+                          border: `1px solid ${showIntelligence ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
+                          borderRadius: "7px",
                           cursor: intelligenceReady ? "pointer" : "default",
                           fontSize: "13px",
-                          fontWeight: 500,
-                          color: showIntelligence
-                            ? "hsl(var(--background))"
-                            : intelligenceReady
-                              ? "var(--green)"
-                              : "hsl(var(--muted-foreground))",
-                          opacity: isAnalyzing ? 0.6 : 1,
+                          fontWeight: showIntelligence ? 500 : 400,
+                          color: showIntelligence ? "hsl(var(--background))" : "hsl(var(--foreground))",
+                          opacity: isAnalyzing ? 0.5 : 1,
                           transition: "all 0.15s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!intelligenceReady) return;
+                          const el = e.currentTarget as HTMLElement;
+                          if (!showIntelligence) {
+                            el.style.background = "hsl(var(--foreground))";
+                            el.style.borderColor = "hsl(var(--foreground))";
+                            el.style.color = "hsl(var(--background))";
+                          } else {
+                            el.style.opacity = "0.85";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!intelligenceReady) return;
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.background = showIntelligence ? "hsl(var(--foreground))" : "hsl(var(--secondary))";
+                          el.style.borderColor = showIntelligence ? "hsl(var(--foreground))" : "hsl(var(--border))";
+                          el.style.color = showIntelligence ? "hsl(var(--background))" : "hsl(var(--foreground))";
+                          el.style.opacity = "1";
                         }}
                       >
                         {isAnalyzing ? (
                           <>
-                            <Loader2
-                              size={12}
-                              style={{
-                                animation: "spin 0.8s linear infinite",
-                                color: "hsl(var(--muted-foreground))",
-                              }}
-                            />
-                            <span
-                              style={{ color: "hsl(var(--muted-foreground))" }}
-                            >
-                              Building signals… {pct}%
-                            </span>
-                            <div
-                              style={{
-                                width: "40px",
-                                height: "2px",
-                                background: "hsl(var(--border))",
-                                borderRadius: "99px",
-                                overflow: "hidden",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  height: "100%",
-                                  width: `${pct}%`,
-                                  background: "var(--green)",
-                                  transition: "width 0.4s",
-                                }}
-                              />
+                            <Loader2 size={11} style={{ animation: "spin 0.8s linear infinite" }} />
+                            <span>{pct}%</span>
+                            <div style={{ width: "32px", height: "2px", background: "hsl(var(--border))", borderRadius: "99px", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${pct}%`, background: "hsl(var(--foreground))", transition: "width 0.4s" }} />
                             </div>
+                            <span style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", fontWeight: 400 }}>{analyzedCount}/{totalToAnalyze}</span>
                           </>
                         ) : (
                           <>
-                            <Sparkles size={13} />
+                            <Sparkles size={11} />
                             {showIntelligence
                               ? "Back to News"
                               : mode === "portfolio"
                                 ? "Portfolio Intelligence"
                                 : "Market Intelligence"}
                             {!showIntelligence && stockSignals.length > 0 && (
-                              <span
-                                style={{
-                                  fontSize: "10px",
-                                  background: "var(--green-subtle)",
-                                  border: "1px solid var(--green-border)",
-                                  borderRadius: "99px",
-                                  padding: "1px 7px",
-                                  color: "var(--green)",
-                                  fontWeight: 500,
-                                }}
-                              >
+                              <span style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", fontWeight: 400 }}>
                                 {stockSignals.length}
                               </span>
                             )}
@@ -1016,50 +966,6 @@ export default function FinancialNews() {
                         </button>
                       );
                     })}
-                    {isAnalyzing && (
-                      <div
-                        style={{
-                          marginLeft: "auto",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <Loader2
-                          size={10}
-                          style={{
-                            color: "hsl(var(--muted-foreground))",
-                            animation: "spin 0.8s linear infinite",
-                          }}
-                        />
-                        <div
-                          style={{
-                            width: "60px",
-                            height: "2px",
-                            background: "hsl(var(--border))",
-                            borderRadius: "99px",
-                            overflow: "hidden",
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: "100%",
-                              width: `${pct}%`,
-                              background: "hsl(var(--foreground))",
-                              transition: "width 0.4s",
-                            }}
-                          />
-                        </div>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            color: "hsl(var(--muted-foreground))",
-                          }}
-                        >
-                          {analyzedCount}/{totalToAnalyze}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -1127,8 +1033,7 @@ export default function FinancialNews() {
                 style={{
                   margin: "32px 0",
                   padding: "20px 24px",
-                  background: "hsl(var(--card)/0.7)",
-                  backdropFilter: "blur(8px)",
+                  background: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "10px",
                   display: "flex",
@@ -1199,8 +1104,7 @@ export default function FinancialNews() {
                 style={{
                   margin: "20px 0",
                   padding: "12px 16px",
-                  background: "hsl(var(--card)/0.7)",
-                  backdropFilter: "blur(8px)",
+                  background: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "8px",
                   display: "flex",
@@ -1254,15 +1158,9 @@ export default function FinancialNews() {
             )}
 
             {/* Content: News grid OR Intelligence overlay */}
-            <div style={{ position: "relative" }}>
-              {!isFetching && (mode === "general" || isLoggedIn) && (
-                <div
-                  style={{
-                    opacity: showIntelligence ? 0 : 1,
-                    pointerEvents: showIntelligence ? "none" : "auto",
-                    transition: "opacity 0.18s ease",
-                  }}
-                >
+            <div>
+              {!isFetching && (mode === "general" || isLoggedIn) && !showIntelligence && (
+                <div>
                   <div
                     style={{
                       display: "grid",
@@ -1315,8 +1213,7 @@ export default function FinancialNews() {
                                       ? "1px solid hsl(var(--border))"
                                       : "none",
                                     height: "100%",
-                                    background: "hsl(var(--card)/0.6)",
-                                    backdropFilter: "blur(8px)",
+                                    background: "hsl(var(--card))",
                                     cursor: "pointer",
                                     transition: "background 0.12s",
                                   }}
@@ -1525,8 +1422,7 @@ export default function FinancialNews() {
                                 onClick={() => setFilter("all")}
                                 style={{
                                   padding: "7px 16px",
-                                  background: "hsl(var(--card)/0.7)",
-                                  backdropFilter: "blur(8px)",
+                                  background: "hsl(var(--secondary))",
                                   border: "1px solid hsl(var(--border))",
                                   borderRadius: "7px",
                                   cursor: "pointer",

@@ -1,15 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  AlertCircle,
-  Filter,
-  ChevronLeft,
-  Sparkles,
-  ShoppingCart,
-  BarChart2,
-  ArrowRight,
-  Check,
-} from "lucide-react";
+import { ChevronLeft, Sparkles, ShoppingCart, BarChart2 } from "lucide-react";
 import { CONFIDENCE_CONFIG } from "@/features/news/config";
 import type { StockSignal } from "@/features/news/types";
 import StockSignalCard from "./StockSignalCard";
@@ -30,58 +21,36 @@ export default function MarketIntelligenceOverlay({
   onCartToggle: (ticker: string) => void;
   onOpenCart: () => void;
 }) {
-  const [selectedSignal, setSelectedSignal] = useState<StockSignal | null>(
-    null,
-  );
-  const [trendFilter, setTrendFilter] = useState<
-    "all" | "buy" | "sell" | "hold"
-  >("all");
+  const [selectedSignal, setSelectedSignal] = useState<StockSignal | null>(null);
+  const [trendFilter, setTrendFilter] = useState<"all" | "buy" | "sell" | "hold">("all");
 
-  const buys = signals.filter(
-    (s) => s.trend === "strong_buy" || s.trend === "buy",
-  );
-  const sells = signals.filter(
-    (s) => s.trend === "strong_sell" || s.trend === "sell",
-  );
+  const buys  = signals.filter((s) => s.trend === "strong_buy" || s.trend === "buy");
+  const sells = signals.filter((s) => s.trend === "strong_sell" || s.trend === "sell");
   const holds = signals.filter((s) => s.trend === "hold");
 
   const displayed =
-    trendFilter === "buy"
-      ? buys
-      : trendFilter === "sell"
-        ? sells
-        : trendFilter === "hold"
-          ? holds
-          : signals;
+    trendFilter === "buy"  ? buys  :
+    trendFilter === "sell" ? sells :
+    trendFilter === "hold" ? holds : signals;
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !selectedSignal) onClose();
-    };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !selectedSignal) onClose(); };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [onClose, selectedSignal]);
 
-  const totalMentions = signals.reduce((a, s) => a + s.totalMentions, 0);
-  const coveredSignals = signals.filter((s) => s.totalMentions > 0);
+  const totalMentions   = signals.reduce((a, s) => a + s.totalMentions, 0);
+  const coveredSignals  = signals.filter((s) => s.totalMentions > 0);
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 10 }}
+      exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 10,
-        background: "transparent",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: "100%",
-      }}
+      style={{ display: "flex", flexDirection: "column" }}
     >
-      {/* Header */}
+      {/* ── Header ── */}
       <div
         style={{
           display: "flex",
@@ -89,12 +58,12 @@ export default function MarketIntelligenceOverlay({
           justifyContent: "space-between",
           padding: "20px 0 16px",
           borderBottom: "1px solid hsl(var(--border))",
-          marginBottom: "16px",
+          marginBottom: "20px",
           flexWrap: "wrap",
-          gap: "12px",
+          gap: "10px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <button
             onClick={onClose}
             style={{
@@ -103,113 +72,42 @@ export default function MarketIntelligenceOverlay({
               gap: "5px",
               height: "30px",
               padding: "0 10px",
-              background: "hsl(var(--card)/0.7)",
-              backdropFilter: "blur(8px)",
+              background: "hsl(var(--secondary))",
               border: "1px solid hsl(var(--border))",
               borderRadius: "7px",
               cursor: "pointer",
               fontSize: "12px",
               color: "hsl(var(--muted-foreground))",
-              transition: "all 0.12s",
+              transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "hsl(var(--foreground))";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "hsl(var(--muted-foreground))";
-            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "hsl(var(--foreground))"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "hsl(var(--muted-foreground))"; }}
           >
             <ChevronLeft size={13} /> News
           </button>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-            <div
-              style={{
-                width: "30px",
-                height: "30px",
-                borderRadius: "8px",
-                background: "var(--green-subtle)",
-                border: "1px solid var(--green-border)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Sparkles size={14} style={{ color: "var(--green)" }} />
-            </div>
-            <div>
-              <h2
-                style={{
-                  fontSize: "16px",
-                  fontWeight: 600,
-                  color: "hsl(var(--foreground))",
-                  margin: 0,
-                  letterSpacing: "-0.02em",
-                }}
-              >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+              <Sparkles size={13} style={{ color: "hsl(var(--muted-foreground))" }} />
+              <h2 style={{ fontSize: "15px", fontWeight: 500, margin: 0, letterSpacing: "-0.02em", color: "hsl(var(--foreground))" }}>
                 {isPortfolio ? "Portfolio Intelligence" : "Market Intelligence"}
               </h2>
-              <p
-                style={{
-                  fontSize: "11px",
-                  color: "hsl(var(--muted-foreground))",
-                  margin: 0,
-                  fontWeight: 300,
-                }}
-              >
-                {totalMentions} mentions · {coveredSignals.length}/
-                {signals.length} stocks covered
-              </p>
             </div>
+            <p style={{ fontSize: "11px", color: "hsl(var(--muted-foreground))", margin: "2px 0 0", fontWeight: 300 }}>
+              {totalMentions} mentions · {coveredSignals.length}/{signals.length} stocks covered
+            </p>
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            flexWrap: "wrap",
-          }}
-        >
-          {[
-            {
-              label: `${buys.length} Buy`,
-              color: "var(--green)",
-              bg: "var(--green-subtle)",
-              border: "var(--green-border)",
-            },
-            {
-              label: `${holds.length} Hold`,
-              color: "var(--amber)",
-              bg: "var(--amber-subtle)",
-              border: "var(--amber-border)",
-            },
-            {
-              label: `${sells.length} Sell`,
-              color: "var(--red)",
-              bg: "var(--red-subtle)",
-              border: "var(--red-border)",
-            },
-          ].map(({ label, color, bg, border }) => (
-            <span
-              key={label}
-              style={{
-                fontSize: "11px",
-                fontWeight: 500,
-                padding: "3px 10px",
-                borderRadius: "99px",
-                background: bg,
-                border: `1px solid ${border}`,
-                color,
-              }}
-            >
-              {label}
-            </span>
-          ))}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {/* Buy/Hold/Sell counts — only show non-zero */}
+          {buys.length > 0 && <span style={{ fontSize: "11.5px", fontWeight: 500, color: "var(--green)" }}>{buys.length} Buy</span>}
+          {holds.length > 0 && <span style={{ fontSize: "11.5px", fontWeight: 500, color: "var(--amber)" }}>{holds.length} Hold</span>}
+          {sells.length > 0 && <span style={{ fontSize: "11.5px", fontWeight: 500, color: "var(--red)" }}>{sells.length} Sell</span>}
+
+          {(buys.length > 0 || holds.length > 0 || sells.length > 0) && (
+            <div style={{ width: "1px", height: "16px", background: "hsl(var(--border))" }} />
+          )}
 
           <button
             onClick={onOpenCart}
@@ -219,225 +117,85 @@ export default function MarketIntelligenceOverlay({
               gap: "6px",
               height: "30px",
               padding: "0 12px",
-              background:
-                cart.length > 0
-                  ? "var(--green-subtle)"
-                  : "hsl(var(--card)/0.7)",
-              backdropFilter: "blur(8px)",
-              border: `1px solid ${cart.length > 0 ? "var(--green-border)" : "hsl(var(--border))"}`,
+              background: cart.length > 0 ? "hsl(var(--secondary))" : "transparent",
+              border: "1px solid hsl(var(--border))",
               borderRadius: "7px",
               cursor: "pointer",
               fontSize: "12px",
-              color:
-                cart.length > 0 ? "var(--green)" : "hsl(var(--muted-foreground))",
+              color: cart.length > 0 ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
               transition: "all 0.12s",
-              fontWeight: cart.length > 0 ? 500 : 400,
             }}
           >
             <ShoppingCart size={12} />
-            {cart.length > 0 ? `${cart.length} in cart` : "Optimizer Cart"}
-            {cart.length > 0 && <ArrowRight size={11} />}
+            {cart.length > 0 ? `${cart.length} in cart` : "Cart"}
           </button>
         </div>
       </div>
 
-      {/* Disclaimer */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "7px",
-          padding: "9px 13px",
-          background: "hsl(var(--card)/0.5)",
-          backdropFilter: "blur(8px)",
-          border: "1px solid var(--amber-border)",
-          borderLeft: "3px solid var(--amber)",
-          borderRadius: "8px",
-          marginBottom: "12px",
-        }}
-      >
-        <AlertCircle size={11} style={{ color: "var(--amber)", flexShrink: 0 }} />
-        <p
-          style={{
-            fontSize: "11px",
-            color: "hsl(var(--muted-foreground))",
-            margin: 0,
-            fontWeight: 300,
-          }}
-        >
-          Signals are derived from news sentiment analysis only. Not financial
-          advice — always do your own research.
-        </p>
-      </div>
+      {/* ── Disclaimer ── */}
+      <p style={{ fontSize: "11px", color: "hsl(var(--muted-foreground))", fontWeight: 300, marginBottom: "16px" }}>
+        Signals derived from news sentiment only — not financial advice.
+      </p>
 
-      {/* Cart info bar */}
-      <AnimatePresence>
-        {cart.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            style={{ overflow: "hidden", marginBottom: "12px" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 12px",
-                background: "var(--green-subtle)",
-                border: "1px solid var(--green-border)",
-                borderRadius: "8px",
-              }}
-            >
-              <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />
-              <p
-                style={{
-                  fontSize: "11.5px",
-                  color: "hsl(var(--foreground))",
-                  margin: 0,
-                }}
-              >
-                <span style={{ fontWeight: 500, color: "var(--green)" }}>
-                  {cart.length} stock{cart.length > 1 ? "s" : ""}
-                </span>{" "}
-                selected:&nbsp;
-                {cart.map((t) => (
-                  <span
-                    key={t}
-                    style={{
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: "11px",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {t}{" "}
-                  </span>
-                ))}
-              </p>
-              <button
-                onClick={onOpenCart}
-                style={{
-                  marginLeft: "auto",
-                  fontSize: "11px",
-                  color: "var(--green)",
-                  fontWeight: 500,
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "3px",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                View cart <ArrowRight size={10} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Confidence legend + filter */}
+      {/* ── Filter row ── */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: "14px",
+          marginBottom: "16px",
           flexWrap: "wrap",
           gap: "8px",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "14px",
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "11px",
-              color: "hsl(var(--muted-foreground))",
-              fontWeight: 500,
-            }}
-          >
-            Confidence:
-          </span>
+        {/* Confidence legend */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <span className="mono-label">Confidence</span>
           {Object.entries(CONFIDENCE_CONFIG).map(([key, cfg]) => (
-            <span
-              key={key}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                fontSize: "11px",
-                color: cfg.color,
-              }}
-            >
-              <span>{cfg.icon}</span> {cfg.label}
+            <span key={key} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: cfg.color }}>
+              {cfg.icon} {cfg.label}
             </span>
           ))}
         </div>
-        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-          <Filter size={11} style={{ color: "hsl(var(--muted-foreground))" }} />
-          {(
-            [
-              { key: "all", label: `All (${signals.length})` },
-              { key: "buy", label: `Buy (${buys.length})` },
-              { key: "hold", label: `Hold (${holds.length})` },
-              { key: "sell", label: `Sell (${sells.length})` },
-            ] as const
-          ).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setTrendFilter(key)}
-              style={{
-                padding: "5px 12px",
-                borderRadius: "7px",
-                fontSize: "12px",
-                fontWeight: trendFilter === key ? 600 : 400,
-                background:
-                  trendFilter === key
-                    ? "hsl(var(--foreground))"
-                    : "hsl(var(--card)/0.6)",
-                backdropFilter: "blur(8px)",
-                border: `1px solid ${trendFilter === key ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
-                color:
-                  trendFilter === key
-                    ? "hsl(var(--background))"
-                    : "hsl(var(--muted-foreground))",
-                cursor: "pointer",
-                transition: "all 0.12s",
-              }}
-            >
-              {label}
-            </button>
-          ))}
+
+        {/* Trend filter tabs */}
+        <div style={{ display: "flex", gap: "2px", borderBottom: "1px solid hsl(var(--border))" }}>
+          {([
+            { key: "all",  label: `All (${signals.length})` },
+            { key: "buy",  label: `Buy (${buys.length})` },
+            { key: "hold", label: `Hold (${holds.length})` },
+            { key: "sell", label: `Sell (${sells.length})` },
+          ] as const).map(({ key, label }) => {
+            const active = trendFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTrendFilter(key)}
+                style={{
+                  padding: "6px 14px",
+                  background: "none",
+                  border: "none",
+                  borderBottom: active ? "1.5px solid hsl(var(--foreground))" : "1.5px solid transparent",
+                  marginBottom: "-1px",
+                  cursor: "pointer",
+                  fontSize: "12.5px",
+                  color: active ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+                  fontWeight: active ? 500 : 400,
+                  transition: "color 0.12s",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Signal cards grid */}
+      {/* ── Signal cards grid ── */}
       {displayed.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px 24px" }}>
-          <BarChart2
-            size={24}
-            style={{
-              color: "hsl(var(--muted-foreground))",
-              margin: "0 auto 12px",
-              display: "block",
-              opacity: 0.3,
-            }}
-          />
-          <p
-            style={{
-              fontSize: "14px",
-              color: "hsl(var(--muted-foreground))",
-              fontWeight: 300,
-            }}
-          >
+        <div style={{ textAlign: "center", padding: "64px 24px" }}>
+          <BarChart2 size={22} style={{ color: "hsl(var(--muted-foreground))", margin: "0 auto 10px", display: "block", opacity: 0.3 }} />
+          <p style={{ fontSize: "13px", color: "hsl(var(--muted-foreground))", fontWeight: 300 }}>
             No {trendFilter !== "all" ? trendFilter : ""} signals found.
           </p>
         </div>
@@ -445,10 +203,18 @@ export default function MarketIntelligenceOverlay({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-            gap: "14px",
-            alignItems: "start",
-            paddingBottom: "24px",
+            gridTemplateColumns: (() => {
+              const n = displayed.length;
+              if (n <= 3) return `repeat(${n}, minmax(260px, 1fr))`;
+              const cols = n % 3 === 1 ? 2 : 3;
+              return `repeat(${cols}, minmax(260px, 1fr))`;
+            })(),
+            gap: "1px",
+            background: "hsl(var(--border))",
+            border: "1px solid hsl(var(--border))",
+            borderRadius: "10px",
+            overflow: "hidden",
+            marginBottom: "32px",
           }}
         >
           {displayed.map((signal, i) => (
@@ -458,10 +224,7 @@ export default function MarketIntelligenceOverlay({
               rank={i}
               onClick={() => setSelectedSignal(signal)}
               inCart={cart.includes(signal.ticker)}
-              onCartToggle={(e) => {
-                e.stopPropagation();
-                onCartToggle(signal.ticker);
-              }}
+              onCartToggle={(e) => { e.stopPropagation(); onCartToggle(signal.ticker); }}
             />
           ))}
         </div>
