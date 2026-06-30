@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { sendMessageToChatbot } from "@/services/chatbotService";
 import { useTheme } from "@/hooks/useTheme";
 import { X, Send, MessageSquare } from "lucide-react";
@@ -7,6 +7,55 @@ interface Message {
   text: string;
   sender: "user" | "bot";
   error?: boolean;
+}
+
+function renderMarkdown(text: string, color: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+
+  lines.forEach((line, i) => {
+    if (!line.trim()) {
+      elements.push(<br key={`br-${i}`} />);
+      return;
+    }
+
+    // numbered list: "1. text" or "1) text"
+    const listMatch = line.match(/^(\d+)[.)]\s+(.+)/);
+    if (listMatch) {
+      elements.push(
+        <div key={i} style={{ display: "flex", gap: "6px", marginTop: i === 0 ? 0 : "4px" }}>
+          <span style={{ opacity: 0.5, flexShrink: 0 }}>{listMatch[1]}.</span>
+          <span>{parseBold(listMatch[2])}</span>
+        </div>
+      );
+      return;
+    }
+
+    // bullet list: "- text" or "• text"
+    const bulletMatch = line.match(/^[-•]\s+(.+)/);
+    if (bulletMatch) {
+      elements.push(
+        <div key={i} style={{ display: "flex", gap: "6px", marginTop: i === 0 ? 0 : "4px" }}>
+          <span style={{ opacity: 0.5, flexShrink: 0 }}>•</span>
+          <span>{parseBold(bulletMatch[1])}</span>
+        </div>
+      );
+      return;
+    }
+
+    elements.push(<div key={i} style={{ marginTop: i === 0 ? 0 : "4px" }}>{parseBold(line)}</div>);
+  });
+
+  return <>{elements}</>;
+}
+
+function parseBold(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) =>
+    p.startsWith("**") && p.endsWith("**")
+      ? <strong key={i} style={{ fontWeight: 600 }}>{p.slice(2, -2)}</strong>
+      : p
+  );
 }
 
 export default function FloatingChatbot() {
@@ -303,7 +352,9 @@ export default function FloatingChatbot() {
                     wordBreak: "break-word",
                   }}
                 >
-                  {msg.text}
+                  {msg.sender === "bot"
+                    ? renderMarkdown(msg.text, botText)
+                    : msg.text}
                 </div>
               </div>
             ))}
