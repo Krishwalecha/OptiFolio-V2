@@ -210,7 +210,10 @@ export default function FinancialNews() {
         // Remap article.stocks from raw names to proper NSE tickers
         setArticles((prev) => prev.map((a) => ({
           ...a,
-          stocks: [...new Set(a.stocks.map((s) => resolved[s.trim().toUpperCase()]?.ticker ?? s))],
+          stocks: [...new Set(a.stocks.flatMap((s) => {
+          const r = resolved[s.trim().toUpperCase()];
+          return r?.ticker ? [r.ticker] : [];
+        }))],
         })));
         // Build tickerName map from resolved data
         const nameMap: Record<string, string> = {};

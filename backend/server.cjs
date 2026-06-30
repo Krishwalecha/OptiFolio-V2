@@ -9,15 +9,17 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors({
-  origin: [
-    "http://localhost:8080",
-    "http://localhost:5173",
-    /\.vercel\.app$/,
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:8080",
+      "http://localhost:5173",
+      /\.vercel\.app$/,
+      process.env.FRONTEND_URL,
+    ].filter(Boolean),
+    credentials: true,
+  }),
+);
 app.use(bodyParser.json({ limit: "10mb" }));
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
@@ -475,7 +477,7 @@ app.post("/api/analyze", async (req, res) => {
 
   const prompt = `Indian equity analyst. Analyze ${compressed.length} NSE/BSE news articles.
 
-STOCKS: Full names — "Reliance Industries","HDFC Bank","Tata Motors","Infosys","SBI","Bajaj Finance","Nifty 50","Sensex","Nifty Bank","Nifty IT","Rupee/INR","FII Flows". IPO = name the company. No stock = [].
+STOCKS: Only individually NSE/BSE listed companies. Always use full official name with & not "and". Examples: "Reliance Industries","HDFC Bank","Tata Motors","Infosys","State Bank of India","Bajaj Finance","ITC Limited","ICICI Bank","Larsen & Toubro","Mahindra & Mahindra","Kotak Mahindra Bank". IPO = name the company filing. EXCLUDE: indices (Nifty, Sensex, Bank Nifty), currencies (Rupee, INR), funds (ETF, MF), macro terms (FII, DII, RBI, GDP). No stock = [].
 
 SENTIMENT: positive=price UP (earnings beat, new order, dividend, buyback, upgrade, IPO listing, guidance raise). negative=price DOWN (earnings miss, crash, FII selling, oil spike, SEBI fine, downgrade, fraud). neutral=no signal.
 
@@ -666,7 +668,7 @@ app.post("/api/resolveStockNames", async (req, res) => {
         const key = name.trim().toUpperCase();
         try {
           const r = await fetch(
-            `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(name + " India NSE")}&lang=en-US&region=IN&quotesCount=5&newsCount=0`,
+            `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(name)}&lang=en-US&region=IN&quotesCount=8&newsCount=0`,
             {
               headers: { "User-Agent": "Mozilla/5.0" },
               signal: AbortSignal.timeout(6000),
@@ -674,11 +676,14 @@ app.post("/api/resolveStockNames", async (req, res) => {
           );
           if (!r.ok) return;
           const d = await r.json();
-          const match = (d?.quotes ?? []).find(
-            (q) =>
-              q.quoteType === "EQUITY" &&
-              (q.exchange === "NSI" || (q.symbol || "").endsWith(".NS")),
+          const nsQuotes = (d?.quotes ?? []).filter(
+            (q) => q.quoteType === "EQUITY" && (q.symbol || "").endsWith(".NS"),
           );
+          const nameUpper = name.trim().toUpperCase();
+          const match =
+            nsQuotes.find((q) => q.symbol.replace(".NS","") === nameUpper) ||
+            nsQuotes.find((q) => (q.shortname || "").toUpperCase().includes(nameUpper)) ||
+            nsQuotes[0];
           if (match) {
             const ticker = (match.symbol || "").replace(/\.NS$/i, "");
             const companyName = (
@@ -1097,8 +1102,10 @@ app.get("/api/news/portfolio", async (req, res) => {
 // ── Chatbot proxy (keeps n8n URL + secret server-side) ───────────────────────
 app.post("/api/chat", async (req, res) => {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
-  const secret     = process.env.N8N_WEBHOOK_SECRET;
-  if (!webhookUrl) return res.status(503).json({ error: "Chatbot not configured" });
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+  if (!webhookUrl)
+    return res.status(503).json({ error: "Chatbot not configured" });
+  console.log(webhookUrl, secret);
 
   try {
     const headers = { "Content-Type": "application/json" };

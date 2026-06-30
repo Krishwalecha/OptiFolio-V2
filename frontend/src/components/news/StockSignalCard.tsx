@@ -83,7 +83,7 @@ export default function StockSignalCard({
           letterSpacing: "0.04em",
           color: "hsl(var(--foreground))",
         }}>
-          {signal.ticker}
+          {signal.companyName !== signal.ticker ? signal.companyName : signal.ticker}
         </span>
         <p style={{
           fontSize: "11px",
@@ -94,8 +94,10 @@ export default function StockSignalCard({
           whiteSpace: "nowrap",
           fontWeight: 300,
           minHeight: "16px",
+          fontFamily: "'JetBrains Mono', monospace",
+          letterSpacing: "0.04em",
         }}>
-          {signal.companyName !== signal.ticker ? signal.companyName : ""}
+          {signal.companyName !== signal.ticker ? signal.ticker : ""}
         </p>
       </div>
 
