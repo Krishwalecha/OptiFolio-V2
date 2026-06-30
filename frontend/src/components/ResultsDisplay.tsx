@@ -1,6 +1,12 @@
 import React, { useState } from "react";
 import StockChart, { ChartPoint } from "./charts/StockChart";
 import { motion, AnimatePresence } from "framer-motion";
+import { useCountUp } from "@/hooks/useCountUp";
+
+function CountUpValue({ value, format }: { value: number; format: (n: number) => string }) {
+  const animated = useCountUp(value);
+  return <>{format(animated)}</>;
+}
 import { TrendingUp, TrendingDown, PieChart, ShieldCheck, ChevronDown, XCircle, Plus, CheckCircle2, Loader2 } from "lucide-react";
 import { OptimizeResult, DroppedStock } from "@/services/optimizerService";
 
@@ -61,23 +67,23 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ result, onSave, isSavin
   const volPct   = (performance.annualised_volatility * 100).toFixed(2);
   const sortedAlloc = [...allocation].sort((a, b) => b.weight_pct - a.weight_pct);
 
-  const metrics = [
+  const metrics: { label: string; value: React.ReactNode; sub: string; color: string; icon?: React.ReactNode }[] = [
     {
       label: "Total invested",
-      value: `₹${totalInvested.toLocaleString("en-IN")}`,
+      value: <CountUpValue value={totalInvested} format={(n) => `₹${Math.round(n).toLocaleString("en-IN")}`} />,
       sub:   `${allocation.length} stocks · ${strategy}`,
       color: "hsl(var(--foreground))",
     },
     {
       label: "Expected return",
-      value: `${retPct}%`,
+      value: <CountUpValue value={performance.expected_return * 100} format={(n) => `${n.toFixed(2)}%`} />,
       sub:   `≈ ₹${(totalInvested * performance.expected_return).toLocaleString("en-IN", { maximumFractionDigits: 0 })} gain`,
       color: Number(retPct) >= 0 ? "var(--green)" : "var(--red)",
       icon:  <TrendingUp size={13} />,
     },
     {
       label: "Volatility (ann.)",
-      value: `${volPct}%`,
+      value: <CountUpValue value={performance.annualised_volatility * 100} format={(n) => `${n.toFixed(2)}%`} />,
       sub:   `Sharpe ${performance.sharpe_ratio.toFixed(2)}  ·  Max DD ${(performance.max_drawdown * 100).toFixed(1)}%`,
       color: "var(--blue)",
       icon:  <TrendingDown size={13} />,
