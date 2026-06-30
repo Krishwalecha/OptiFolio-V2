@@ -681,8 +681,10 @@ app.post("/api/resolveStockNames", async (req, res) => {
           );
           const nameUpper = name.trim().toUpperCase();
           const match =
-            nsQuotes.find((q) => q.symbol.replace(".NS","") === nameUpper) ||
-            nsQuotes.find((q) => (q.shortname || "").toUpperCase().includes(nameUpper)) ||
+            nsQuotes.find((q) => q.symbol.replace(".NS", "") === nameUpper) ||
+            nsQuotes.find((q) =>
+              (q.shortname || "").toUpperCase().includes(nameUpper),
+            ) ||
             nsQuotes[0];
           if (match) {
             const ticker = (match.symbol || "").replace(/\.NS$/i, "");
@@ -1105,7 +1107,6 @@ app.post("/api/chat", async (req, res) => {
   const secret = process.env.N8N_WEBHOOK_SECRET;
   if (!webhookUrl)
     return res.status(503).json({ error: "Chatbot not configured" });
-  console.log(webhookUrl, secret);
 
   try {
     const headers = { "Content-Type": "application/json" };
@@ -1126,7 +1127,9 @@ app.post("/api/chat", async (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(port, () => {
-  console.log(`🚀 Server running at http://localhost:${port}`);
+  console.log(
+    `🚀 Server running at ${process.env.BASE_URL || `http://localhost:${port}`}`,
+  );
   console.log(
     `🔑 Gemini: ${GEMINI_KEYS.length}  Groq: ${GROQ_KEYS.length}  NewsData: ${NEWSDATA_KEYS.length}  GNews: ${GNEWS_KEYS.length}`,
   );
