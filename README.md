@@ -1,187 +1,75 @@
 # OptiFolio
 
-OptiFolio is an AI-powered portfolio optimization and stock intelligence platform that helps investors make data-driven investment decisions through machine learning, portfolio optimization, risk profiling, financial news analysis, and market sentiment tracking.
+AI-powered portfolio optimizer for Indian equities. Input stocks, set your risk profile, get an allocation backed by XGBoost return predictions and Modern Portfolio Theory.
 
-The platform combines quantitative analysis, predictive modeling, and AI-powered insights to generate personalized portfolio recommendations aligned with an investor's risk tolerance and financial goals.
-
----
-
-# Key Features
-
-## Portfolio Optimization
-
-- AI-assisted portfolio construction
-- Risk-adjusted asset allocation
-- Personalized investment recommendations
-- Diversification analysis
-- Portfolio performance evaluation
-- Sharpe ratio-based optimization
-- Multi-stock portfolio generation
+**Live → [optifolio-app.vercel.app](https://optifolio-app.vercel.app)**
 
 ---
 
-## Machine Learning-Based Prediction Engine
+## What it does
 
-- Historical stock data analysis
-- Feature engineering from market indicators
-- XGBoost-powered return prediction
-- Expected return forecasting
-- Risk estimation and scoring
-- Confidence-based prediction outputs
+1. Fetches 5 years of OHLCV data from Yahoo Finance for your chosen NSE stocks
+2. Engineers ~40 technical features (RSI, MACD, ATR, Bollinger Bands, momentum, etc.)
+3. Trains a per-stock XGBoost model to predict forward returns, evaluated by IC and directional accuracy
+4. Runs MPT optimization (Max Sharpe, Min Volatility, Aggressive Growth) with Ledoit-Wolf covariance shrinkage and Monte Carlo simulation
+5. Blends ML predictions with historical returns using IC-weighted alpha
+6. Returns allocation with shares, weights, Sharpe ratio, VaR, max drawdown, Sortino, Calmar, and more
 
----
-
-## Risk Profiling System
-
-- Investor risk assessment questionnaire
-- Dynamic risk score calculation
-- Personalized investor categorization
-- Conservative, Balanced, Growth, and Aggressive portfolio strategies
-- Recommendation engine tailored to risk tolerance
+Also includes financial news with AI-driven stock impact detection, a SIP calculator, portfolio history, and an AI assistant (Groq via n8n).
 
 ---
 
-## AI-Powered Financial Intelligence
+## Stack
 
-- Financial news aggregation
-- News sentiment analysis
-- Stock-specific impact detection
-- Market event interpretation
-- Company-level news insights
-- AI-generated investment reasoning
-
----
-
-## Market Analytics
-
-- Historical stock performance visualization
-- Trend analysis
-- Volatility analysis
-- Momentum tracking
-- Risk-return evaluation
-- Market sentiment monitoring
+| Layer | Tech |
+|---|---|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui |
+| Backend API | Node.js, Express |
+| ML Engine | Python, XGBoost, pandas, NumPy, scikit-learn, Optuna |
+| Database | Supabase (Postgres + Auth) |
+| AI | Groq (LLaMA), Gemini, n8n |
+| Deploy | Vercel (frontend), Render (backend + ML) |
 
 ---
 
-## Portfolio Management
+## Local setup
 
-- Portfolio creation and storage
-- Portfolio history tracking
-- Allocation management
-- User-specific investment records
-- Portfolio performance monitoring
+```bash
+# Frontend
+cd frontend
+npm install
+cp .env.example .env        # set VITE_API_URL
+npm run dev
 
----
+# Backend
+cd backend
+npm install
+cp .env.example .env        # set Supabase, n8n keys
+node server.cjs
 
-# System Architecture
-
-```text
-Frontend (React + TypeScript)
-            │
-            ▼
-Backend API (Node.js + Express)
-            │
- ┌──────────┼──────────┐
- ▼          ▼          ▼
-
-Supabase   AI Layer   ML Engine
-Database   Gemini     XGBoost
-            Groq
-
-            ▼
-      Portfolio Optimizer
-            ▼
-    Investment Recommendations
+# ML engine (Python 3.10+)
+cd backend
+pip install -r requirements.txt
 ```
 
 ---
 
-# Technology Stack
+## Architecture
 
-## Frontend
+```
+React + TypeScript (Vercel)
+        │
+        ▼
+Express API (Render)
+        │
+   ┌────┴────┐
+   ▼         ▼
+Supabase   Python subprocess
+           XGBoost + MPT optimizer
+```
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- Shadcn UI
-
-## Backend
-
-- Node.js
-- Express.js
-
-## Database
-
-- Supabase
-
-## Artificial Intelligence
-
-- Gemini
-- Groq
-
-## Machine Learning
-
-- Python
-- Pandas
-- NumPy
-- Scikit-Learn
-- XGBoost
-
-## Financial Data Processing
-
-- Historical Market Data
-- Technical Indicators
-- News Sentiment Signals
-- Risk Metrics
-- Portfolio Analytics
+The ML engine runs as a spawned Python subprocess per optimization request — no persistent ML server, stateless and easy to scale.
 
 ---
 
-# Workflow
-
-### Step 1
-
-User creates an account and completes a risk assessment.
-
-### Step 2
-
-User selects stocks and specifies investment preferences.
-
-### Step 3
-
-Historical market data and financial news are collected and analyzed.
-
-### Step 4
-
-AI models evaluate news sentiment and identify market-moving events.
-
-### Step 5
-
-The machine learning engine predicts expected returns and risk metrics.
-
-### Step 6
-
-The portfolio optimization engine generates an allocation strategy based on:
-
-- Expected Returns
-- Risk Profile
-- Diversification Requirements
-- Market Conditions
-- Portfolio Constraints
-
-### Step 7
-
-Users receive portfolio recommendations, insights, and performance analytics.
-
----
-
-# Objective
-
-The goal of OptiFolio is to bridge traditional portfolio management with modern AI and machine learning techniques, enabling investors to make smarter, data-driven investment decisions through personalized portfolio optimization and intelligent market analysis.
-
----
-
-## Disclaimer
-
-OptiFolio is developed for educational, research, and analytical purposes. Investment recommendations generated by the platform should not be considered financial advice.
+> For educational and research purposes. Not financial advice.
