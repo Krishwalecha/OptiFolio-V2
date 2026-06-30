@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import Landing from "./pages/Landing";
 import AppPage from "./pages/Optimizer.tsx";
 import Portfolios from "./pages/Portfolios";
@@ -19,6 +20,15 @@ import FloatingChatbot from "@/components/FloatingChatBot";
 
 const queryClient = new QueryClient();
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+function BackendWakeup() {
+  useEffect(() => {
+    fetch(`${API_BASE}/api/health`).catch(() => {});
+  }, []);
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -28,6 +38,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <BackendWakeup />
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/Optimizer" element={<AppPage />} />

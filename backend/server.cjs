@@ -256,6 +256,7 @@ app.post("/api/optimize", (req, res) => {
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => res.send("Stock Optimize API — v2 streamlined"));
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 // ── Sign up ───────────────────────────────────────────────────────────────────
 app.post("/api/signup", async (req, res) => {

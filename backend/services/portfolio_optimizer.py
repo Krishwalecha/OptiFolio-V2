@@ -98,8 +98,9 @@ def monte_carlo(
 ) -> pd.DataFrame:
     stocks = exp_ret.index.tolist()
     n = len(stocks)
-    mu, sig = exp_ret.values, cov.values
-    W = _random_weights(n, n_sims, lo, hi)
+    mu = exp_ret.values.astype(np.float32)
+    sig = cov.values.astype(np.float32)
+    W = _random_weights(n, n_sims, lo, hi).astype(np.float32)
     ret = W @ mu
     var = np.einsum("ij,jk,ik->i", W, sig, W)
     vol = np.sqrt(np.clip(var, 0, None))

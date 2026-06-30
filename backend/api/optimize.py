@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import sys
 import warnings
@@ -171,12 +172,25 @@ def run_optimize(
         if nifty_df is not None:
             b = np.log(nifty_df["Close"] / nifty_df["Close"].shift(1)).dropna()
             benchmark = b.reindex(daily_returns.index).dropna()
+            del nifty_df
 
         # 3. Feature engineering + XGBoost training
         features = engineer_all_stocks(stock_data)
+        del stock_data
+        gc.collect()
+
         model_results = train_all_models(features, tune=tune, verbose=False)
+        del features
+        gc.collect()
+
         if not model_results:
             return {"error": "Model training failed. Try different tickers."}
+
+        # strip booster/scaler objects — only scalar metrics are needed downstream
+        for v in model_results.values():
+            v.pop("model", None)
+            v.pop("scaler", None)
+        gc.collect()
 
         prediction_summary = summarise_predictions(model_results)
 
