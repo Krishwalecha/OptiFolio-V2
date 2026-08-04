@@ -37,7 +37,6 @@ const Navbar: React.FC = () => {
     { label: "Home", path: "/" },
     { label: "Optimizer", path: "/Optimizer" },
     { label: "Portfolios", path: "/Portfolios" },
-    { label: "News", path: "/FinancialNews" },
     { label: "SIP", path: "/SIPCalculator" },
     { label: "About", path: "/About" },
   ];
