@@ -1,0 +1,143 @@
+    .skeleton {
+        background: linear-gradient(90deg, hsl(var(--foreground) / 0.05) 30%, hsl(var(--foreground) / 0.09) 50%, hsl(var(--foreground) / 0.05) 70%);
+        background-size: 300% 100%;
+        animation: ui-sheen 1.6s ease-in-out infinite;
+    }
+
+    .text-shimmer {
+        background: linear-gradient(90deg, hsl(var(--muted-foreground)) 35%, hsl(var(--foreground)) 50%, hsl(var(--muted-foreground)) 65%);
+        background-size: 300% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: ui-sheen 2.2s linear infinite;
+    }
+
+    .animate-pop {
+        animation: ui-pop 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+        transform-origin: top;
+    }
+
+    .range-input {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        height: 24px;
+        cursor: pointer;
+    }
+    .range-input::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 18px;
+        width: 18px;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.25);
+        transition: transform 0.15s;
+    }
+    .range-input::-moz-range-thumb {
+        height: 18px;
+        width: 18px;
+        border: 0;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+    .range-input:active::-webkit-slider-thumb {
+        transform: scale(1.12);
+    }
+    .range-input:focus-visible::-webkit-slider-thumb {
+        box-shadow: 0 0 0 4px hsl(var(--brand) / 0.35);
+    }
+
+    .ld-spin {
+        animation: ui-spin 0.8s linear infinite;
+    }
+    .ld-step {
+        animation: ui-spin 0.9s steps(8) infinite;
+    }
+    .ld-dot {
+        animation: ui-dot 1s ease-in-out infinite;
+    }
+    .ld-block {
+        animation: ui-block 1.2s ease-in-out infinite;
+    }
+    .ld-bar {
+        animation: ui-bar 1s ease-in-out infinite;
+    }
+    .ld-ping {
+        animation: ui-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    .ld-slide {
+        animation: ui-slide 1.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }
+
+    .chart-draw {
+        stroke-dasharray: 4000;
+        stroke-dashoffset: 4000;
+        animation: ui-draw 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .chart-draw[stroke-dasharray="4 4"] {
+        stroke-dashoffset: 0;
+        animation: ui-fade 0.8s ease both;
+    }
+
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+    .rise {
+        animation: ui-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+@keyframes ui-sheen {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+@keyframes ui-pop {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes ui-spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes ui-dot {
+    0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+    40% { opacity: 1; transform: translateY(-30%); }
+}
+@keyframes ui-block {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 1; }
+}
+@keyframes ui-bar {
+    0%, 100% { transform: scaleY(0.35); opacity: 0.4; }
+    50% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes ui-ping {
+    0% { transform: scale(0.6); opacity: 0.6; }
+    100% { transform: scale(1.8); opacity: 0; }
+}
+@keyframes ui-slide {
+    from { left: -35%; }
+    to { left: 100%; }
+}
+@keyframes ui-draw {
+    to { stroke-dashoffset: 0; }
+}
+@keyframes ui-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes ui-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+}
+
+.stagger > * {
+    animation: ui-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+.stagger > *:nth-child(7) { animation-delay: 360ms; }
+.stagger > *:nth-child(n + 8) { animation-delay: 420ms; }
