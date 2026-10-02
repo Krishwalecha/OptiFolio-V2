@@ -1,5 +1,6 @@
 import type { Article, AnalysisResult, StockSignal, NewsCache } from "./types";
 import { CART_KEY, CACHE_TTL_MS, normalizeNseTicker } from "./config";
+import { api } from "@/lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL;
 
@@ -30,8 +31,14 @@ export function readCache(key: string): NewsCache | null {
   } catch { return null; }
 }
 
-export function writeCache(articles: Article[], key: string) {
-  try { localStorage.setItem(key, JSON.stringify({ articles, fetchedAt: Date.now() })); } catch {}
+export function writeCache(articles: Article[], key: string, names: Record<string, string> = {}, fetchedAt = Date.now()) {
+  try { localStorage.setItem(key, JSON.stringify({ articles, names, fetchedAt })); } catch {}
+}
+
+export function nextRefresh(c: NewsCache | null) {
+  if (!c) return "";
+  const h = Math.max(0, Math.ceil((c.fetchedAt + CACHE_TTL_MS - Date.now()) / 3600000));
+  return h <= 1 ? "within the hour" : `in ${h}h`;
 }
 
 export function cacheIsValid(c: NewsCache | null) {
@@ -104,7 +111,7 @@ export async function fetchPortfolioNews(tickers: string[]): Promise<{ articles:
 
 // ── AI analysis (via backend) ─────────────────────────────────────────────────
 
-export async function analyzeWithAI(articles: Article[]): Promise<AnalysisResult[]> {
+export async function analyzeWithAI(articles: Article[]): Promise<{ results: AnalysisResult[]; names: Record<string, string> }> {
   try {
     const res = await fetch(`${API_BASE}/api/analyze`, {
       method: "POST",
@@ -112,48 +119,17 @@ export async function analyzeWithAI(articles: Article[]): Promise<AnalysisResult
       body: JSON.stringify({ articles }),
       signal: AbortSignal.timeout(120000),
     });
-    if (!res.ok) return [];
-    return ((await res.json()).results ?? []) as AnalysisResult[];
-  } catch { return []; }
+    if (!res.ok) return { results: [], names: {} };
+    const d = await res.json();
+    return { results: (d.results ?? []) as AnalysisResult[], names: d.names ?? {} };
+  } catch { return { results: [], names: {} }; }
 }
 
 // ── ticker helpers (via backend) ──────────────────────────────────────────────
 
-export async function resolveTickerNames(
-  tickers: string[],
-): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(`${API_BASE}/api/resolveTickerNames`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tickers }),
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) return Object.fromEntries(tickers.map((t) => [t, t]));
-    const data = await res.json();
-    return data.names ?? Object.fromEntries(tickers.map((t) => [t, t]));
-  } catch { return Object.fromEntries(tickers.map((t) => [t, t])); }
-}
-
-export async function resolveStockNames(
-  names: string[],
-): Promise<Record<string, { ticker: string; companyName: string }>> {
-  try {
-    const res = await fetch(`${API_BASE}/api/resolveStockNames`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ names }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!res.ok) return {};
-    const data = await res.json();
-    return data.result ?? {};
-  } catch { return {}; }
-}
-
 export async function fetchUserTickers(userId: string): Promise<string[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/userPortfolios/${userId}`, {
+    const res = await api(`/api/userPortfolios/${userId}`, {
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return [];

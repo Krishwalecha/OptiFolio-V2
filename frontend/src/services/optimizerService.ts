@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL as string;
+import { api } from "@/lib/api";
 
 export type RiskProfile = "conservative" | "balanced" | "aggressive";
 
@@ -20,6 +20,8 @@ export interface Performance {
   beta: number;
   // advanced
   annualised_return_hist: number;
+  volatility_hist?: number;
+  sharpe_hist?: number;
   calmar_ratio: number;
   omega_ratio: number;
   tail_ratio: number;
@@ -59,24 +61,102 @@ export interface OptimizeResult {
   performance: Performance;
   scores: Record<
     string,
-    { predicted_return: number; composite_score: number; dir_accuracy: number; ic: number }
+    {
+      predicted_return: number;
+      predicted_month?: number;
+      composite_score: number;
+      dir_accuracy: number;
+      ic: number;
+      ml_alpha?: number;
+      market_percentile?: number;
+    }
   >;
   chart_data: ChartDataMap;
   dropped_stocks: DroppedStock[];
+  constraints?: { min_weight: number; max_weight: number };
+  model?: ModelInfo;
+  frontier?: Frontier;
+  cached?: boolean;
+  elapsed_ms?: number;
+  core?: { ticker: string; weight: number } | null;
+}
+
+export interface ModelInfo {
+  version: string;
+  as_of: string;
+  horizon_days: number;
+  universe_size: number;
+  oos_ic: number;
+  oos_ic_tstat: number;
+  oos_spread_hit_rate: number;
+  oos_months: number;
+  ml_active: boolean;
+  ic_used?: number;
+  deep: boolean;
+}
+
+export interface Frontier {
+  simulated: [number, number][];
+  chosen: [number, number];
+  n_simulated: number;
+}
+
+export interface Constraints {
+  minWeight?: number;
+  maxWeight?: number;
+  core?: number;
+}
+
+export interface RebalanceHolding {
+  ticker: string;
+  target_pct: number;
+  buy_price: number;
+  price: number;
+  shares_est: number;
+  invested_inr: number;
+  value_inr: number;
+  pnl_inr: number;
+  pnl_pct: number;
+  current_pct: number;
+  drift_pp: number;
+  trade_shares: number;
+  error?: string;
+}
+
+export interface RebalanceReport {
+  saved_at: string;
+  as_of: string;
+  holdings: RebalanceHolding[];
+  total_invested: number;
+  total_value: number;
+  total_pnl_pct: number;
+  max_drift_pp: number;
+  needs_rebalance: boolean;
+  threshold_pp: number;
+  note: string;
+  nifty_return_pct?: number | null;
+  curve?: Array<{ date: string; portfolio: number; nifty50?: number }>;
+}
+
+export async function checkRebalance(sessionId: string): Promise<RebalanceReport> {
+  const res = await api(`/api/rebalance/${encodeURIComponent(sessionId)}`);
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error ?? `Server error ${res.status}`);
+  return data as RebalanceReport;
 }
 
 export interface OptimizeRequest {
   tickers: string[];
   investment: number;
   risk: RiskProfile;
-  userId: string;
+  userId?: string;
   deepMode?: boolean;
+  constraints?: Constraints;
 }
 
 export async function savePortfolio(userId: string, sessionId: string, allocation: AllocationItem[]): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/savePortfolio`, {
+  const res = await api("/api/savePortfolio", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, sessionId, allocation }),
   });
   const data = await res.json();
@@ -84,9 +164,8 @@ export async function savePortfolio(userId: string, sessionId: string, allocatio
 }
 
 export async function optimize(req: OptimizeRequest): Promise<OptimizeResult> {
-  const res = await fetch(`${API_BASE}/api/optimize`, {
+  const res = await api("/api/optimize", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
 

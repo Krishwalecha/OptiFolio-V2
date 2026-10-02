@@ -1,1511 +1,391 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { Separator } from "@/components/ui/separator";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowUpRight, Check, Plus, RefreshCw, X } from "lucide-react";
+import AppShell from "@/components/app/AppShell";
+import PriceSheet from "@/components/charts/PriceSheet";
 import { useAuth } from "@/context/AuthContext";
-import {
-  Loader2,
-  ExternalLink,
-  RefreshCw,
-  AlertCircle,
-  Globe,
-  Briefcase,
-  Sparkles,
-  ShoppingCart,
-} from "lucide-react";
+import type { Article, FilterType, StockSignal } from "@/features/news/types";
+import { readCart, writeCart } from "@/features/news/utils";
+import { useNewsFeed } from "@/features/news/useNewsFeed";
+import { Badge, Button, Card, CardHeader, EmptyState, LinearBar, Pagination, Segmented, Sheet, Skeleton, StackBar, Tabs, Wave, buttonClass } from "@/ui";
+import { cn } from "@/lib/utils";
 
-import type { Article, Sentiment, FilterType, NewsMode, StockSignal } from "@/features/news/types";
-import {
-  S,
-  BATCH,
-  toTitleCase,
-  CACHE_KEY,
-  PORTFOLIO_CACHE_KEY,
-  normalizeNseTicker,
-} from "@/features/news/config";
-import {
-  readCart,
-  writeCart,
-  readCache,
-  writeCache,
-  cacheIsValid,
-  cacheAge,
-  dedup,
-  fetchGeneralNews,
-  fetchPortfolioNews,
-  fetchUserTickers,
-  computeStockSignals,
-  analyzeWithAI,
-  resolveTickerNames,
-  resolveStockNames,
-} from "@/features/news/utils";
+const PAGE_SIZE = 12;
 
-import ArticleDrawer from "@/components/news/ArticleDrawer";
-import CartToast from "@/components/news/CartToast";
-import CartPanel from "@/components/news/CartPanel";
-import MarketIntelligenceOverlay from "@/components/news/MarketIntelligenceOverlay";
+const TONE: Record<string, { label: string; dot: string }> = {
+  positive: { label: "Positive", dot: "var(--green)" },
+  negative: { label: "Negative", dot: "var(--red)" },
+  neutral: { label: "Neutral", dot: "hsl(var(--muted-foreground))" },
+  pending: { label: "Scoring", dot: "hsl(var(--muted-foreground) / 0.4)" },
+};
 
-export type { Article };
+const COVERAGE: Record<StockSignal["trend"], string> = {
+  strong_buy: "Mostly positive",
+  buy: "Leaning positive",
+  hold: "Mixed",
+  sell: "Leaning negative",
+  strong_sell: "Mostly negative",
+};
+
+const ago = (iso: string) => {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!isFinite(m)) return "";
+  if (m < 60) return `${Math.max(1, m)}m`;
+  if (m < 1440) return `${Math.floor(m / 60)}h`;
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+};
+
+const StockChip: React.FC<{ t: string; inBasket: boolean; onToggle: (t: string) => void }> = ({ t, inBasket, onToggle }) => (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onToggle(t);
+    }}
+    title={inBasket ? `Remove ${t} from basket` : `Add ${t} to basket`}
+    className={cn("inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11.5px] font-medium ring-1 ring-inset transition-colors", inBasket ? "bg-brand/10 text-brand ring-brand/30" : "text-muted-foreground ring-[var(--hairline)] hover:text-foreground")}
+  >
+    {inBasket ? <Check size={11} /> : <Plus size={11} />}
+    {t}
+  </button>
+);
+
+const ArticleRow: React.FC<{ a: Article; basket: string[]; onToggle: (t: string) => void; onOpen: () => void }> = ({ a, basket, onToggle, onOpen }) => (
+  <li>
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && onOpen()} className="group flex cursor-pointer gap-4 border-b border-[var(--hairline)] px-5 py-4 transition-colors hover:bg-foreground/[0.025] focus-visible:bg-foreground/[0.04]">
+      <span className="mt-[7px] h-2 w-2 shrink-0 rounded-full" style={{ background: TONE[a.sentiment].dot }} title={TONE[a.sentiment].label} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-medium leading-snug text-foreground">{a.title}</div>
+        {a.sentimentReason && <p className="mb-0 mt-1 line-clamp-1 text-[12.5px] text-muted-foreground">{a.sentimentReason}</p>}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
+          <span>{a.source}</span>
+          <span aria-hidden="true">·</span>
+          <span>{ago(a.publishedAt)}</span>
+          {a.stocks.map((t) => (
+            <StockChip key={t} t={t} inBasket={basket.includes(t)} onToggle={onToggle} />
+          ))}
+        </div>
+      </div>
+      {a.image && <img src={a.image} alt="" loading="lazy" className="hidden h-16 w-24 shrink-0 rounded-lg object-cover opacity-90 sm:block" onError={(e) => (e.currentTarget.style.display = "none")} />}
+    </div>
+  </li>
+);
 
 export default function FinancialNews() {
   const { isLoggedIn, userId } = useAuth();
-
-  const [mode, setMode] = useState<NewsMode>("general");
-  const [articles, setArticles] = useState<Article[]>([]);
+  const feed = useNewsFeed(userId, isLoggedIn);
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<FilterType>("all");
-  const [isFetching, setIsFetching] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analyzedCount, setAnalyzedCount] = useState(0);
-  const [totalToAnalyze, setTotalToAnalyze] = useState(0);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [cacheAgeStr, setCacheAgeStr] = useState("");
-  const [userTickers, setUserTickers] = useState<string[]>([]);
-  const [tickerNames, setTickerNames] = useState<Record<string, string>>({});
-  const [isResolvingNames, setIsResolvingNames] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [stockSignals, setStockSignals] = useState<StockSignal[]>([]);
-  const [showIntelligence, setShowIntelligence] = useState(false);
-  const [portfolioTickers, setPortfolioTickers] = useState<string[]>([]);
+  const [open, setOpen] = useState<Article | null>(null);
+  const [chart, setChart] = useState<string | null>(null);
+  const [basket, setBasket] = useState<string[]>(readCart);
 
-  const [cart, setCart] = useState<string[]>(() => readCart());
-  const [showCart, setShowCart] = useState(false);
-  const [showCartToast, setShowCartToast] = useState(false);
-  const cartToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const abortRef = useRef<AbortController | null>(null);
-
-  const counts = {
-    positive: articles.filter((a) => a.sentiment === "positive").length,
-    negative: articles.filter((a) => a.sentiment === "negative").length,
-    neutral: articles.filter((a) => a.sentiment === "neutral").length,
-    pending: articles.filter((a) => a.sentiment === "pending").length,
-  };
-  const total = counts.positive + counts.negative + counts.neutral;
-  const displayed =
-    filter === "all"
-      ? articles
-      : articles.filter((a) => a.sentiment === filter);
-  const pct =
-    totalToAnalyze > 0 ? Math.round((analyzedCount / totalToAnalyze) * 100) : 0;
-
-  const handleCartToggle = useCallback((ticker: string) => {
-    setCart((prev) => {
-      const next = prev.includes(ticker)
-        ? prev.filter((t) => t !== ticker)
-        : [...prev, ticker];
-      writeCart(next);
-      return next;
-    });
-    if (cartToastTimer.current) clearTimeout(cartToastTimer.current);
-    setShowCartToast(true);
-    cartToastTimer.current = setTimeout(() => setShowCartToast(false), 4000);
-  }, []);
-
-  const handleCartRemove = useCallback((ticker: string) => {
-    setCart((prev) => {
-      const next = prev.filter((t) => t !== ticker);
+  const toggle = useCallback((t: string) => {
+    setBasket((b) => {
+      const next = b.includes(t) ? b.filter((x) => x !== t) : [...b, t].slice(0, 15);
       writeCart(next);
       return next;
     });
   }, []);
 
-  const handleCartClear = useCallback(() => {
-    setCart([]);
-    writeCart([]);
-  }, []);
-
-  const handleGoToOptimizer = useCallback(() => {
-    writeCart(cart);
-    window.location.href = "/Optimizer";
-  }, [cart]);
-
+  const counts = useMemo(() => {
+    const c = { positive: 0, negative: 0, neutral: 0, pending: 0 };
+    feed.articles.forEach((a) => c[a.sentiment]++);
+    return c;
+  }, [feed.articles]);
+  const shown = filter === "all" ? feed.articles : feed.articles.filter((a) => a.sentiment === filter);
+  const [page, setPage] = useState(1);
+  const listTop = useRef<HTMLDivElement>(null);
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => setPage(1), [filter, feed.mode]);
   useEffect(() => {
-    if (mode === "portfolio" && portfolioTickers.length === 0) {
-      setStockSignals([]);
-      return;
-    }
-    if (articles.some((a) => a.analyzed)) {
-      const filterTickers = mode === "portfolio" ? portfolioTickers : undefined;
-      setStockSignals(
-        computeStockSignals(articles, tickerNames, filterTickers),
-      );
-    }
-  }, [articles, tickerNames, mode, portfolioTickers]);
-
-  const analyzeAll = async (all: Article[], cacheKey: string) => {
-    setIsAnalyzing(true);
-    setTotalToAnalyze(all.length);
-    setAnalyzedCount(0);
-    const batches: Article[][] = [];
-    for (let i = 0; i < all.length; i += BATCH)
-      batches.push(all.slice(i, i + BATCH));
-    let done = 0;
-    const finalArticles: Article[] = [...all];
-
-    for (let bi = 0; bi < batches.length; bi++) {
-      const batch = batches[bi];
-      if (bi > 0) await new Promise((r) => setTimeout(r, 5000));
-      try {
-        const results = await analyzeWithAI(batch);
-        setArticles((prev) => {
-          const next = prev.map((article) => {
-            const r = results.find((x) => x.id === article.id);
-            if (!r)
-              return batch.some((b) => b.id === article.id)
-                ? {
-                    ...article,
-                    sentiment: "neutral" as Sentiment,
-                    analyzed: true,
-                    sentimentReason: "",
-                    stocks: article.stocks,
-                  }
-                : article;
-            const normalizedAiStocks = (
-              Array.isArray(r.stocks) ? r.stocks : []
-            ).map(normalizeNseTicker);
-            const mergedStocks = [
-              ...new Set([...article.stocks, ...normalizedAiStocks]),
-            ];
-            return {
-              ...article,
-              stocks: mergedStocks,
-              sentiment: (["positive", "negative", "neutral"].includes(
-                r.sentiment,
-              )
-                ? r.sentiment
-                : "neutral") as Sentiment,
-              sentimentReason: r.reason ?? "",
-              analyzed: true,
-            };
-          });
-          next.forEach((a, i) => {
-            finalArticles[i] = a;
-          });
-          return next;
-        });
-        done += batch.length;
-        setAnalyzedCount(done);
-      } catch {
-        setArticles((prev) =>
-          prev.map((a) =>
-            batch.some((b) => b.id === a.id) && !a.analyzed
-              ? { ...a, sentiment: "neutral" as Sentiment, analyzed: true }
-              : a,
-          ),
-        );
-        done += batch.length;
-        setAnalyzedCount(done);
-      }
-    }
-    setIsAnalyzing(false);
-
-    // Resolve AI-returned company names → proper NSE tickers + company names
-    const rawNames = [...new Set(
-      finalArticles.flatMap((a) => a.stocks).filter((n) => n && n.length >= 2)
-    )];
-    if (rawNames.length > 0) {
-      resolveStockNames(rawNames).then((resolved) => {
-        // Remap article.stocks from raw names to proper NSE tickers
-        setArticles((prev) => prev.map((a) => ({
-          ...a,
-          stocks: [...new Set(a.stocks.flatMap((s) => {
-          const r = resolved[s.trim().toUpperCase()];
-          return r?.ticker ? [r.ticker] : [];
-        }))],
-        })));
-        // Build tickerName map from resolved data
-        const nameMap: Record<string, string> = {};
-        for (const { ticker, companyName } of Object.values(resolved)) {
-          if (ticker && companyName) nameMap[ticker] = companyName;
-        }
-        setTickerNames((prev) => ({ ...prev, ...nameMap }));
-      });
-    }
-
-    setTimeout(() => {
-      setArticles((latest) => {
-        writeCache(latest, cacheKey);
-        return latest;
-      });
-    }, 200);
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+  const goTo = (p: number) => {
+    setPage(p);
+    const top = listTop.current?.getBoundingClientRect().top ?? 0;
+    if (top < 0) listTop.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  const fetchGeneral = useCallback(async () => {
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    setIsFetching(true);
-    setIsAnalyzing(false);
-    setError(null);
-    setArticles([]);
-    setAnalyzedCount(0);
-    setTotalToAnalyze(0);
-    setCacheAgeStr("");
-    setStockSignals([]);
-    setShowIntelligence(false);
-    setPortfolioTickers([]);
-
-    try {
-      const articles = await fetchGeneralNews();
-      const clean = dedup(articles);
-      if (!clean.length) {
-        setError("No articles retrieved. Check your backend server is running.");
-        setIsFetching(false);
-        return;
-      }
-      setArticles(clean);
-      setLastFetched(new Date());
-      setIsFetching(false);
-      await analyzeAll(clean, CACHE_KEY);
-    } catch (e: any) {
-      if (e?.name !== "AbortError")
-        setError("Fetch failed. Make sure your backend server is running.");
-      setIsFetching(false);
-    }
-  }, []);
-
-  const fetchPortfolio = useCallback(async () => {
-    if (!isLoggedIn || !userId) return;
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    setIsFetching(true);
-    setIsAnalyzing(false);
-    setError(null);
-    setArticles([]);
-    setAnalyzedCount(0);
-    setTotalToAnalyze(0);
-    setCacheAgeStr("");
-    setStockSignals([]);
-    setShowIntelligence(false);
-
-    try {
-      const tickers = await fetchUserTickers(userId);
-      if (!tickers.length) {
-        setError(
-          "No stocks found in your portfolio. Add stocks to your portfolio first.",
-        );
-        setIsFetching(false);
-        return;
-      }
-      setUserTickers(tickers);
-      setPortfolioTickers(tickers);
-      setIsResolvingNames(true);
-      const { articles: raw, nameMap } = await fetchPortfolioNews(tickers);
-      setTickerNames(nameMap);
-      setIsResolvingNames(false);
-      const clean = dedup(raw);
-      if (!clean.length) {
-        setError("No news found for your portfolio stocks.");
-        setIsFetching(false);
-        return;
-      }
-      setArticles(clean);
-      setLastFetched(new Date());
-      setIsFetching(false);
-      await analyzeAll(clean, PORTFOLIO_CACHE_KEY);
-    } catch (e: any) {
-      if (e?.name !== "AbortError")
-        setError("Failed to fetch portfolio news. Please try again.");
-      setIsFetching(false);
-      setIsResolvingNames(false);
-    }
-  }, [isLoggedIn, userId]);
-
-  const handleModeSwitch = (newMode: NewsMode) => {
-    if (newMode === mode || isFetching || isAnalyzing) return;
-    setArticles([]);
-    setStockSignals([]);
-    setShowIntelligence(false);
-    setMode(newMode);
-    setFilter("all");
-    setError(null);
-    if (newMode === "general") {
-      setPortfolioTickers([]);
-      setUserTickers([]);
-      const cache = readCache(CACHE_KEY);
-      if (cacheIsValid(cache)) {
-        setArticles(cache!.articles);
-        setLastFetched(new Date(cache!.fetchedAt));
-        setCacheAgeStr(cacheAge(cache));
-        setStockSignals(
-          computeStockSignals(cache!.articles, tickerNames, undefined),
-        );
-        return;
-      }
-      fetchGeneral();
-    } else {
-      setPortfolioTickers([]);
-      fetchPortfolio();
-    }
-  };
-
-  const handleRefresh = () => {
-    setShowIntelligence(false);
-    if (mode === "general") fetchGeneral();
-    else fetchPortfolio();
-  };
-
-  useEffect(() => {
-    const cache = readCache(CACHE_KEY);
-    if (cacheIsValid(cache)) {
-      setArticles(cache!.articles);
-      setLastFetched(new Date(cache!.fetchedAt));
-      setCacheAgeStr(cacheAge(cache));
-      setStockSignals(computeStockSignals(cache!.articles, {}, undefined));
-      const iv = setInterval(
-        () => setCacheAgeStr(cacheAge(readCache(CACHE_KEY))),
-        60000,
-      );
-      return () => clearInterval(iv);
-    } else {
-      fetchGeneral();
-    }
-  }, []);
-
-  const fmt = (iso: string) => {
-    try {
-      const d = new Date(iso),
-        now = new Date();
-      const diffH = Math.floor((now.getTime() - d.getTime()) / 3600000);
-      if (diffH < 1)
-        return `${Math.floor((now.getTime() - d.getTime()) / 60000)}m ago`;
-      if (diffH < 24) return `${diffH}h ago`;
-      return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-    } catch {
-      return "—";
-    }
-  };
-
-  const intelligenceReady =
-    !isAnalyzing &&
-    !isFetching &&
-    articles.some((a) => a.analyzed) &&
-    (mode !== "portfolio" || portfolioTickers.length > 0);
+  const signals = feed.signals.slice(0, 8);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        background: "hsl(var(--background))",
-        position: "relative",
-      }}
+    <AppShell
+      title="Markets"
+      description="Indian market headlines, scored positive or negative by a language model and linked to the stocks they mention. Tone of coverage is not a price forecast."
+      actions={
+        <>
+          {feed.mode === "general" && feed.age ? (
+            <span className="text-[12.5px] text-muted-foreground">
+              Updated {feed.age}
+              {feed.next && ` · next update ${feed.next}`}
+            </span>
+          ) : (
+            feed.mode === "portfolio" && (
+              <Button variant="secondary" onClick={feed.refresh} disabled={feed.fetching || feed.analyzing}>
+                <RefreshCw size={14} className={cn(feed.fetching && "ld-spin")} /> Refresh
+              </Button>
+            )
+          )}
+        </>
+      }
     >
-      <div
-        className="dark:hidden"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          pointerEvents: "none",
-          backgroundImage: `linear-gradient(to right,rgba(229,231,235,0.8) 1px,transparent 1px),linear-gradient(to bottom,rgba(229,231,235,0.8) 1px,transparent 1px),radial-gradient(circle 500px at 20% 100%,rgba(139,92,246,0.3),transparent),radial-gradient(circle 500px at 100% 80%,rgba(59,130,246,0.3),transparent)`,
-          backgroundSize: "48px 48px,48px 48px,100% 100%,100% 100%",
-        }}
-      />
-      <div
-        className="hidden dark:block"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          pointerEvents: "none",
-          backgroundImage: `linear-gradient(to right,rgba(71,85,105,0.2) 1px,transparent 1px),linear-gradient(to bottom,rgba(71,85,105,0.2) 1px,transparent 1px),radial-gradient(circle 500px at 20% 100%,rgba(139,92,246,0.25),transparent),radial-gradient(circle 500px at 100% 80%,rgba(59,130,246,0.2),transparent)`,
-          backgroundSize: "48px 48px,48px 48px,100% 100%,100% 100%",
-        }}
-      />
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          display: "flex",
-          flexDirection: "column",
-          flex: 1,
-        }}
-      >
-        <Navbar />
-
-        <style>{`
-          @keyframes spin { to { transform: rotate(360deg); } }
-          @keyframes pulse-dot { 0%,100%{opacity:1}50%{opacity:0.3} }
-          .filter-tab:hover { color: hsl(var(--foreground)) !important; }
-          .article-row:hover { background: hsl(var(--secondary)/0.8) !important; }
-          .mode-btn:hover { opacity: 1 !important; }
-        `}</style>
-
-        <main style={{ flex: 1 }}>
-          <div
-            style={{
-              maxWidth: "1100px",
-              margin: "0 auto",
-              padding: "56px 24px 80px",
-              position: "relative",
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              {/* Page Header */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  marginBottom: "28px",
-                }}
-              >
-                <div>
-                  <p className="mono-label" style={{ marginBottom: "6px" }}>
-                    Indian markets
-                  </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      marginBottom: "10px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <h1
-                      style={{
-                        fontSize: "clamp(1.8rem,4vw,2.4rem)",
-                        color: "hsl(var(--foreground))",
-                        margin: 0,
-                        letterSpacing: "-0.03em",
-                      }}
-                    >
-                      Market News
-                    </h1>
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "5px",
-                        background: "var(--green-subtle)",
-                        border: "1px solid var(--green-border)",
-                        borderRadius: "99px",
-                        padding: "3px 9px",
-                        fontSize: "10px",
-                        letterSpacing: "0.06em",
-                        textTransform: "uppercase",
-                        color: "var(--green)",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "5px",
-                          height: "5px",
-                          borderRadius: "50%",
-                          background: "var(--green)",
-                          animation: "pulse-dot 2.4s ease-in-out infinite",
-                        }}
-                      />
-                      Live
-                    </div>
-                  </div>
-                  <p
-                    style={{
-                      fontSize: "14px",
-                      color: "hsl(var(--muted-foreground))",
-                      fontWeight: 300,
-                      lineHeight: 1.65,
-                      maxWidth: "440px",
-                      margin: 0,
-                    }}
-                  >
-                    AI-analysed headlines from NSE, BSE and Indian equity
-                    markets. Sentiment scored in real time.
-                  </p>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    paddingTop: "4px",
-                    flexShrink: 0,
-                  }}
-                >
-                  {cacheAgeStr && !isFetching && !isAnalyzing && (
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: "hsl(var(--muted-foreground))",
-                        fontFamily: "'JetBrains Mono', monospace",
-                      }}
-                    >
-                      cached {cacheAgeStr}
-                    </span>
-                  )}
-                  {lastFetched && !cacheAgeStr && (
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "hsl(var(--muted-foreground))",
-                      }}
-                    >
-                      {lastFetched.toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  )}
-                  {articles.length > 0 && (
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "hsl(var(--muted-foreground))",
-                      }}
-                    >
-                      {articles.length} stories
-                    </span>
-                  )}
-                  <button
-                    onClick={handleRefresh}
-                    disabled={isFetching || isAnalyzing}
-                    style={{
-                      height: "32px",
-                      padding: "0 12px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      background: "hsl(var(--secondary))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "7px",
-                      cursor:
-                        isFetching || isAnalyzing ? "not-allowed" : "pointer",
-                      fontSize: "13px",
-                      color: "hsl(var(--foreground))",
-                      opacity: isFetching || isAnalyzing ? 0.45 : 1,
-                      transition: "opacity 0.12s",
-                    }}
-                  >
-                    {isFetching ? (
-                      <Loader2
-                        size={12}
-                        style={{ animation: "spin 0.8s linear infinite" }}
-                      />
-                    ) : (
-                      <RefreshCw size={12} />
-                    )}
-                    {isFetching
-                      ? "Fetching…"
-                      : isAnalyzing
-                        ? "Analysing…"
-                        : "Refresh"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Controls row */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "20px",
-                  flexWrap: "wrap",
-                  gap: "10px",
-                }}
-              >
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <button
-                    onClick={() => handleModeSwitch("general")}
-                    className="mode-btn"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "7px 14px",
-                      background:
-                        mode === "general"
-                          ? "hsl(var(--foreground))"
-                          : "hsl(var(--secondary))",
-                      border: `1px solid ${mode === "general" ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
-                      borderRadius: "7px",
-                      fontSize: "13px",
-                      fontWeight: mode === "general" ? 500 : 400,
-                      color:
-                        mode === "general"
-                          ? "hsl(var(--background))"
-                          : "hsl(var(--muted-foreground))",
-                      opacity: mode === "general" ? 1 : 0.75,
-                      cursor: "pointer",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    <Globe size={12} /> General
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (isLoggedIn) handleModeSwitch("portfolio");
-                    }}
-                    className="mode-btn"
-                    title={
-                      !isLoggedIn ? "Sign in to view portfolio news" : undefined
-                    }
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "7px 14px",
-                      background:
-                        mode === "portfolio"
-                          ? "hsl(var(--foreground))"
-                          : "hsl(var(--secondary))",
-                      border: `1px solid ${mode === "portfolio" ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
-                      borderRadius: "7px",
-                      fontSize: "13px",
-                      fontWeight: mode === "portfolio" ? 500 : 400,
-                      color:
-                        mode === "portfolio"
-                          ? "hsl(var(--background))"
-                          : "hsl(var(--muted-foreground))",
-                      opacity: !isLoggedIn
-                        ? 0.4
-                        : mode === "portfolio"
-                          ? 1
-                          : 0.75,
-                      cursor: !isLoggedIn ? "not-allowed" : "pointer",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    <Briefcase size={12} /> My Portfolio
-                    {!isLoggedIn && (
-                      <span style={{ fontSize: "10px", opacity: 0.7 }}>
-                        · sign in
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-                <div
-                  style={{ display: "flex", gap: "8px", alignItems: "center" }}
-                >
-                  {cart.length > 0 && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      onClick={() => setShowCart(true)}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        padding: "7px 14px",
-                        background: "hsl(var(--secondary))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "7px",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: 400,
-                        color: "hsl(var(--foreground))",
-                        transition: "all 0.15s",
-                      }}
-                    >
-                      <ShoppingCart size={13} />
-                      {cart.length} stock{cart.length > 1 ? "s" : ""}
-                    </motion.button>
-                  )}
-
-                  <AnimatePresence>
-                    {(intelligenceReady || isAnalyzing) && (
-                      <motion.button
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        onClick={() => {
-                          if (intelligenceReady) setShowIntelligence((v) => !v);
-                        }}
-                        disabled={isAnalyzing}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "7px",
-                          padding: "7px 14px",
-                          background: showIntelligence
-                            ? "hsl(var(--foreground))"
-                            : "hsl(var(--secondary))",
-                          border: `1px solid ${showIntelligence ? "hsl(var(--foreground))" : "hsl(var(--border))"}`,
-                          borderRadius: "7px",
-                          cursor: intelligenceReady ? "pointer" : "default",
-                          fontSize: "13px",
-                          fontWeight: showIntelligence ? 500 : 400,
-                          color: showIntelligence ? "hsl(var(--background))" : "hsl(var(--foreground))",
-                          opacity: isAnalyzing ? 0.5 : 1,
-                          transition: "all 0.15s",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!intelligenceReady) return;
-                          const el = e.currentTarget as HTMLElement;
-                          if (!showIntelligence) {
-                            el.style.background = "hsl(var(--foreground))";
-                            el.style.borderColor = "hsl(var(--foreground))";
-                            el.style.color = "hsl(var(--background))";
-                          } else {
-                            el.style.opacity = "0.85";
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!intelligenceReady) return;
-                          const el = e.currentTarget as HTMLElement;
-                          el.style.background = showIntelligence ? "hsl(var(--foreground))" : "hsl(var(--secondary))";
-                          el.style.borderColor = showIntelligence ? "hsl(var(--foreground))" : "hsl(var(--border))";
-                          el.style.color = showIntelligence ? "hsl(var(--background))" : "hsl(var(--foreground))";
-                          el.style.opacity = "1";
-                        }}
-                      >
-                        {isAnalyzing ? (
-                          <>
-                            <Loader2 size={11} style={{ animation: "spin 0.8s linear infinite" }} />
-                            <span>{pct}%</span>
-                            <div style={{ width: "32px", height: "2px", background: "hsl(var(--border))", borderRadius: "99px", overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${pct}%`, background: "hsl(var(--foreground))", transition: "width 0.4s" }} />
-                            </div>
-                            <span style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", fontWeight: 400 }}>{analyzedCount}/{totalToAnalyze}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={11} />
-                            {showIntelligence
-                              ? "Back to News"
-                              : mode === "portfolio"
-                                ? "Portfolio Intelligence"
-                                : "Market Intelligence"}
-                            {!showIntelligence && stockSignals.length > 0 && (
-                              <span style={{ fontSize: "10px", color: "hsl(var(--muted-foreground))", fontWeight: 400 }}>
-                                {stockSignals.length}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </motion.button>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-
-              {/* Portfolio ticker pills */}
-              <AnimatePresence>
-                {mode === "portfolio" &&
-                  userTickers.length > 0 &&
-                  !isFetching && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      style={{ overflow: "hidden", marginBottom: "16px" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            color: "hsl(var(--muted-foreground))",
-                            fontFamily: "'JetBrains Mono', monospace",
-                          }}
-                        >
-                          tracking
-                        </span>
-                        {userTickers.map((ticker) => (
-                          <span
-                            key={ticker}
-                            title={
-                              tickerNames[ticker] &&
-                              tickerNames[ticker] !== ticker
-                                ? tickerNames[ticker]
-                                : undefined
-                            }
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              background: "hsl(var(--secondary))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "4px",
-                              padding: "2px 7px",
-                              fontSize: "11px",
-                              fontWeight: 500,
-                              fontFamily: "'JetBrains Mono', monospace",
-                              color: "hsl(var(--foreground))",
-                            }}
-                          >
-                            {ticker}
-                            {tickerNames[ticker] &&
-                              tickerNames[ticker] !== ticker && (
-                                <span
-                                  style={{
-                                    fontSize: "10px",
-                                    color: "hsl(var(--muted-foreground))",
-                                    fontWeight: 400,
-                                  }}
-                                >
-                                  ·{" "}
-                                  {tickerNames[ticker]
-                                    .split(" ")
-                                    .slice(0, 2)
-                                    .join(" ")}
-                                </span>
-                              )}
-                          </span>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-              </AnimatePresence>
-
-              {/* Sentiment summary bar */}
-              {articles.length > 0 && !isFetching && total > 0 && (
-                <div style={{ marginBottom: "24px" }}>
-                  <div
-                    style={{
-                      height: "3px",
-                      borderRadius: "99px",
-                      overflow: "hidden",
-                      background: "hsl(var(--border))",
-                      display: "flex",
-                      marginBottom: "12px",
-                    }}
-                  >
-                    {(["positive", "negative", "neutral"] as const).map((s) => {
-                      const p = total > 0 ? (counts[s] / total) * 100 : 0;
-                      return (
-                        <div
-                          key={s}
-                          style={{
-                            height: "100%",
-                            width: `${p}%`,
-                            background:
-                              s === "positive"
-                                ? "var(--green)"
-                                : s === "negative"
-                                  ? "var(--red)"
-                                  : "var(--amber)",
-                            transition: "width 0.8s cubic-bezier(0.4,0,0.2,1)",
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "24px",
-                    }}
-                  >
-                    {(["positive", "negative", "neutral"] as const).map((s) => {
-                      const cfg = S[s];
-                      const p =
-                        total > 0 ? Math.round((counts[s] / total) * 100) : 0;
-                      const active = filter === s;
-                      return (
-                        <button
-                          key={s}
-                          onClick={() =>
-                            setFilter((f) => (f === s ? "all" : s))
-                          }
-                          className="filter-tab"
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            background: "none",
-                            border: "none",
-                            padding: 0,
-                            cursor: "pointer",
-                            opacity: filter !== "all" && !active ? 0.3 : 1,
-                            transition: "opacity 0.12s",
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: "6px",
-                              height: "6px",
-                              borderRadius: "50%",
-                              background: cfg.dot,
-                              flexShrink: 0,
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              color: active
-                                ? cfg.color
-                                : "hsl(var(--muted-foreground))",
-                            }}
-                          >
-                            {cfg.label}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              fontWeight: 500,
-                              color: "hsl(var(--foreground))",
-                            }}
-                          >
-                            {counts[s]}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              color: "hsl(var(--muted-foreground))",
-                            }}
-                          >
-                            {p}%
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Filter tab bar */}
-              {articles.length > 0 && !isFetching && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 0,
-                    borderBottom: "1px solid hsl(var(--border))",
-                    marginBottom: 0,
-                  }}
-                >
-                  {(
-                    ["all", "positive", "negative", "neutral"] as FilterType[]
-                  ).map((key) => {
-                    const labels = {
-                      all: "All",
-                      positive: "Bullish",
-                      negative: "Bearish",
-                      neutral: "Neutral",
-                    };
-                    const active = filter === key;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => setFilter(key)}
-                        className="filter-tab"
-                        style={{
-                          padding: "8px 16px",
-                          background: "none",
-                          border: "none",
-                          borderBottom: active
-                            ? "1.5px solid hsl(var(--foreground))"
-                            : "1.5px solid transparent",
-                          marginBottom: "-1px",
-                          cursor: "pointer",
-                          fontSize: "13px",
-                          color: active
-                            ? "hsl(var(--foreground))"
-                            : "hsl(var(--muted-foreground))",
-                          fontWeight: active ? 500 : 400,
-                          transition: "color 0.12s",
-                        }}
-                      >
-                        {labels[key]}
-                        {key !== "all" && (
-                          <span style={{ marginLeft: "5px", opacity: 0.45 }}>
-                            {counts[key as keyof typeof counts]}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </motion.div>
-
-            {/* Banners */}
-            {mode === "portfolio" && !isLoggedIn && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{
-                  margin: "32px 0",
-                  padding: "20px 24px",
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "10px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "14px",
-                }}
-              >
-                <div
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "8px",
-                    background: "hsl(var(--secondary))",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Briefcase
-                    size={14}
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p
-                    style={{
-                      fontSize: "13.5px",
-                      fontWeight: 500,
-                      color: "hsl(var(--foreground))",
-                      margin: "0 0 3px 0",
-                    }}
-                  >
-                    Sign in to see portfolio news
-                  </p>
-                  <p
-                    style={{
-                      fontSize: "12.5px",
-                      color: "hsl(var(--muted-foreground))",
-                      margin: 0,
-                      fontWeight: 300,
-                    }}
-                  >
-                    Get AI-analysed news specifically for the stocks in your
-                    portfolio.
-                  </p>
-                </div>
-                <a
-                  href="/SignIn"
-                  style={{
-                    flexShrink: 0,
-                    padding: "7px 16px",
-                    background: "hsl(var(--foreground))",
-                    color: "hsl(var(--background))",
-                    borderRadius: "7px",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    textDecoration: "none",
-                  }}
-                >
-                  Sign in
-                </a>
-              </motion.div>
-            )}
-
-            {error && (
-              <div
-                style={{
-                  margin: "20px 0",
-                  padding: "12px 16px",
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                }}
-              >
-                <AlertCircle
-                  size={13}
-                  style={{ color: "#dc2626", flexShrink: 0, marginTop: "1px" }}
-                />
-                <p style={{ fontSize: "13px", color: "#dc2626", margin: 0 }}>
-                  {error}
-                </p>
-              </div>
-            )}
-
-            {(isFetching || (isAnalyzing && articles.length === 0)) && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "80px 24px",
-                  gap: "12px",
-                }}
-              >
-                <Loader2
-                  size={16}
-                  style={{
-                    color: "hsl(var(--muted-foreground))",
-                    animation: "spin 0.8s linear infinite",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "13.5px",
-                    color: "hsl(var(--muted-foreground))",
-                    fontWeight: 300,
-                  }}
-                >
-                  {isResolvingNames
-                    ? "Resolving company names…"
-                    : isFetching
-                      ? mode === "portfolio"
-                        ? `Fetching news for ${userTickers.length} portfolio stocks…`
-                        : "Fetching latest market news…"
-                      : `Analysing ${totalToAnalyze} articles (${pct}%)…`}
-                </span>
-              </div>
-            )}
-
-            {/* Content: News grid OR Intelligence overlay */}
-            <div>
-              {!isFetching && (mode === "general" || isLoggedIn) && !showIntelligence && (
-                <div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      border:
-                        articles.length > 0
-                          ? "1px solid hsl(var(--border))"
-                          : "none",
-                      borderRadius: "10px",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <AnimatePresence mode="popLayout">
-                      {displayed.length > 0
-                        ? displayed.map((article, idx) => {
-                            const s = (
-                              [
-                                "positive",
-                                "negative",
-                                "neutral",
-                                "pending",
-                              ].includes(article.sentiment)
-                                ? article.sentiment
-                                : "neutral"
-                            ) as keyof typeof S;
-                            const cfg = S[s];
-                            const isPend = s === "pending";
-                            const isRight = idx % 2 === 1;
-                            return (
-                              <motion.div
-                                key={article.id}
-                                layout
-                                initial={{ opacity: 0, y: 4 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0 }}
-                                transition={{
-                                  duration: 0.15,
-                                  delay: Math.min(idx * 0.006, 0.1),
-                                }}
-                              >
-                                <div
-                                  className="article-row"
-                                  onClick={() => setSelectedArticle(article)}
-                                  style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "3px 1fr auto",
-                                    borderBottom:
-                                      "1px solid hsl(var(--border))",
-                                    borderLeft: isRight
-                                      ? "1px solid hsl(var(--border))"
-                                      : "none",
-                                    height: "100%",
-                                    background: "hsl(var(--card))",
-                                    cursor: "pointer",
-                                    transition: "background 0.12s",
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      background: article.analyzed
-                                        ? cfg.dot
-                                        : "transparent",
-                                      transition: "background 0.3s",
-                                    }}
-                                  />
-                                  <div
-                                    style={{
-                                      padding: "14px 16px 14px 14px",
-                                      minWidth: 0,
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "5px",
-                                        marginBottom: "5px",
-                                        flexWrap: "wrap",
-                                      }}
-                                    >
-                                      <span
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "3px",
-                                          fontSize: "11px",
-                                          color: cfg.color,
-                                          fontWeight: 500,
-                                        }}
-                                      >
-                                        <cfg.Icon
-                                          size={9}
-                                          style={
-                                            isPend
-                                              ? {
-                                                  animation:
-                                                    "spin 0.8s linear infinite",
-                                                }
-                                              : {}
-                                          }
-                                        />
-                                        {cfg.label}
-                                      </span>
-                                      <span
-                                        style={{
-                                          width: "1px",
-                                          height: "10px",
-                                          background: "hsl(var(--border))",
-                                        }}
-                                      />
-                                      <span
-                                        style={{
-                                          fontSize: "11px",
-                                          color: "hsl(var(--muted-foreground))",
-                                          fontWeight: 300,
-                                        }}
-                                      >
-                                        {article.source}
-                                      </span>
-                                      {article.stocks.slice(0, 2).map((tk) => (
-                                        <span
-                                          key={tk}
-                                          style={{
-                                            background: "hsl(var(--secondary))",
-                                            border:
-                                              "1px solid hsl(var(--border))",
-                                            borderRadius: "3px",
-                                            padding: "1px 5px",
-                                            fontSize: "10px",
-                                            fontFamily: "'JetBrains Mono', monospace",
-                                            color: "hsl(var(--foreground))",
-                                            fontWeight: 500,
-                                          }}
-                                        >
-                                          {tk}
-                                        </span>
-                                      ))}
-                                      {article.stocks.length > 2 && (
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color:
-                                              "hsl(var(--muted-foreground))",
-                                          }}
-                                        >
-                                          +{article.stocks.length - 2}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <h3
-                                      style={{
-                                        fontSize: "13.5px",
-                                        fontWeight: 500,
-                                        letterSpacing: "-0.01em",
-                                        lineHeight: 1.45,
-                                        color: "hsl(var(--foreground))",
-                                        margin: "0 0 5px 0",
-                                        display: "-webkit-box",
-                                        WebkitLineClamp: 2,
-                                        WebkitBoxOrient: "vertical",
-                                        overflow: "hidden",
-                                      }}
-                                    >
-                                      {article.title}
-                                    </h3>
-                                    {article.sentimentReason && !isPend && (
-                                      <p
-                                        style={{
-                                          fontSize: "11.5px",
-                                          color: "hsl(var(--muted-foreground))",
-                                          lineHeight: 1.5,
-                                          margin: 0,
-                                          fontWeight: 400,
-                                          display: "-webkit-box",
-                                          WebkitLineClamp: 1,
-                                          WebkitBoxOrient: "vertical",
-                                          overflow: "hidden",
-                                        }}
-                                      >
-                                        {toTitleCase(article.sentimentReason)}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      flexDirection: "column",
-                                      alignItems: "flex-end",
-                                      justifyContent: "space-between",
-                                      padding: "14px 14px 14px 0",
-                                      minWidth: "60px",
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        fontSize: "11px",
-                                        color: "hsl(var(--muted-foreground))",
-                                        fontWeight: 300,
-                                        whiteSpace: "nowrap",
-                                      }}
-                                    >
-                                      {fmt(article.publishedAt)}
-                                    </span>
-                                    <a
-                                      href={article.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "3px",
-                                        fontSize: "12px",
-                                        fontWeight: 500,
-                                        color: "hsl(var(--foreground))",
-                                        textDecoration: "none",
-                                        opacity: 0.25,
-                                        transition: "opacity 0.12s",
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        (
-                                          e.currentTarget as HTMLElement
-                                        ).style.opacity = "1";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        (
-                                          e.currentTarget as HTMLElement
-                                        ).style.opacity = "0.25";
-                                      }}
-                                    >
-                                      Read <ExternalLink size={10} />
-                                    </a>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            );
-                          })
-                        : !isFetching &&
-                          articles.length > 0 && (
-                            <div
-                              style={{
-                                gridColumn: "1/-1",
-                                textAlign: "center",
-                                padding: "48px 24px",
-                              }}
-                            >
-                              <p
-                                style={{
-                                  fontSize: "14px",
-                                  color: "hsl(var(--muted-foreground))",
-                                  marginBottom: "16px",
-                                  fontWeight: 300,
-                                }}
-                              >
-                                No {filter} articles right now.
-                              </p>
-                              <button
-                                onClick={() => setFilter("all")}
-                                style={{
-                                  padding: "7px 16px",
-                                  background: "hsl(var(--secondary))",
-                                  border: "1px solid hsl(var(--border))",
-                                  borderRadius: "7px",
-                                  cursor: "pointer",
-                                  fontSize: "13px",
-                                  color: "hsl(var(--foreground))",
-                                }}
-                              >
-                                Show all
-                              </button>
-                            </div>
-                          )}
-                    </AnimatePresence>
-                  </div>
-                  {!isFetching && articles.length === 0 && !error && (
-                    <div style={{ textAlign: "center", padding: "80px 24px" }}>
-                      <p
-                        style={{
-                          fontSize: "14px",
-                          color: "hsl(var(--muted-foreground))",
-                          fontWeight: 300,
-                        }}
-                      >
-                        Loading articles…
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <AnimatePresence>
-                {showIntelligence && (
-                  <MarketIntelligenceOverlay
-                    signals={stockSignals}
-                    onClose={() => setShowIntelligence(false)}
-                    isPortfolio={mode === "portfolio"}
-                    cart={cart}
-                    onCartToggle={handleCartToggle}
-                    onOpenCart={() => setShowCart(true)}
-                  />
-                )}
-              </AnimatePresence>
-            </div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Segmented
+          value={feed.mode}
+          onChange={(m) => (m === "portfolio" && !isLoggedIn ? navigate("/SignIn?next=/FinancialNews") : feed.switchMode(m))}
+          options={[
+            { value: "general", label: "All headlines" },
+            { value: "portfolio", label: "My holdings" },
+          ]}
+        />
+        {feed.analyzing && (
+          <div className="flex min-w-[220px] items-center gap-3 text-[12.5px] text-muted-foreground">
+            <Wave size={14} className="text-brand" />
+            Scoring {feed.done} of {feed.total}
+            <LinearBar className="w-24" />
           </div>
-        </main>
-
-        <Separator />
-        <Footer />
+        )}
       </div>
 
+      {feed.error ? (
+        <EmptyState
+          title={feed.error}
+          action={
+            feed.mode === "portfolio" && feed.error.includes("Save a portfolio") ? (
+              <Link to="/Optimizer" className={buttonClass("primary", "md")}>
+                Open the optimizer
+              </Link>
+            ) : (
+              <Button onClick={feed.refresh}>Retry</Button>
+            )
+          }
+        />
+      ) : (
+        <div className="grid items-start gap-4 lg:grid-cols-[1fr_340px] [&>*]:min-w-0">
+          <Card padded={false} className="overflow-hidden">
+            <div ref={listTop} className="scroll-mt-6 px-5 pt-2">
+              <Tabs
+                value={filter}
+                onChange={setFilter}
+                className="border-0"
+                options={[
+                  { value: "all", label: `All ${feed.articles.length || ""}` },
+                  { value: "positive", label: `Positive ${counts.positive || ""}` },
+                  { value: "negative", label: `Negative ${counts.negative || ""}` },
+                  { value: "neutral", label: `Neutral ${counts.neutral || ""}` },
+                ]}
+              />
+            </div>
+            <div className="border-t border-[var(--hairline)]">
+              {feed.fetching ? (
+                <div className="space-y-5 p-5">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex gap-4">
+                      <Skeleton className="mt-1 h-2 w-2 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-4/5" />
+                        <Skeleton className="h-3 w-2/5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : shown.length ? (
+                <ul className="m-0 list-none p-0">
+                  {pageItems.map((a) => (
+                    <ArticleRow key={a.id} a={a} basket={basket} onToggle={toggle} onOpen={() => setOpen(a)} />
+                  ))}
+                </ul>
+              ) : null}
+              {!feed.fetching && shown.length > PAGE_SIZE && (
+                <div className="flex flex-col items-center justify-between gap-3 border-t border-[var(--hairline)] px-5 py-3 sm:flex-row">
+                  <span className="num text-[12.5px] text-muted-foreground">
+                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, shown.length)} of {shown.length}
+                  </span>
+                  <Pagination page={page} pageCount={pageCount} onChange={goTo} />
+                </div>
+              )}
+              {feed.fetching || shown.length ? null : (
+                <p className="px-5 py-12 text-center text-[13.5px] text-muted-foreground">No {filter} headlines right now.</p>
+              )}
+            </div>
+          </Card>
+
+          <div className="space-y-4 lg:sticky lg:top-6">
+            <Card padded={false} className="hidden lg:block">
+              <div className="flex items-center justify-between gap-3 p-5 pb-3">
+                <div>
+                  <div className="text-[14px] font-medium tracking-[-0.01em]">Basket</div>
+                  <div className="mt-0.5 text-[12.5px] text-muted-foreground">{basket.length ? `${basket.length} of 15 stocks` : "Stocks you pick from the news"}</div>
+                </div>
+                {basket.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      writeCart([]);
+                      setBasket([]);
+                    }}
+                    className="text-[12px] text-muted-foreground hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              {basket.length ? (
+                <div className="flex flex-wrap gap-1.5 px-5">
+                  <AnimatePresence initial={false}>
+                    {basket.map((t) => (
+                      <motion.span
+                        key={t}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.18 }}
+                        className="inline-flex h-7 items-center gap-1 rounded-lg bg-foreground/[0.06] pl-2.5 pr-1 text-[12.5px] font-medium"
+                        title={feed.names[t] ?? t}
+                      >
+                        {t}
+                        <button type="button" aria-label={`Remove ${t}`} onClick={() => toggle(t)} className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:text-foreground">
+                          <X size={11} />
+                        </button>
+                      </motion.span>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <p className="m-0 px-5 text-[13px] leading-relaxed text-muted-foreground">
+                  Press <Plus size={12} className="inline -translate-y-px" /> on any stock in a headline or in Most mentioned to add it here.
+                </p>
+              )}
+              <div className="p-5 pt-4">
+                <Button variant="primary" className="w-full" disabled={basket.length < 2} onClick={() => navigate("/Optimizer")}>
+                  {basket.length < 2 ? `Add ${2 - basket.length} more to optimize` : `Optimize ${basket.length} stocks`}
+                </Button>
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="Tone of coverage" description={counts.pending ? `${counts.pending} headlines still being scored` : `${counts.positive + counts.negative + counts.neutral} headlines scored`} />
+              <StackBar
+                height={8}
+                items={[
+                  { label: "Positive", value: counts.positive, color: "var(--green)" },
+                  { label: "Neutral", value: counts.neutral, color: "hsl(var(--foreground) / 0.18)" },
+                  { label: "Negative", value: counts.negative, color: "var(--red)" },
+                ]}
+              />
+              <div className="mt-2.5 flex justify-between text-[12px] text-muted-foreground">
+                <span className="num">{counts.positive} positive</span>
+                <span className="num">{counts.negative} negative</span>
+              </div>
+            </Card>
+
+            <Card padded={false}>
+              <div className="p-5 pb-3">
+                <CardHeader className="mb-0" title="Most mentioned" description="Stocks named in at least one scored headline." />
+              </div>
+              {signals.length ? (
+                <ul className="m-0 list-none p-0">
+                  {signals.map((s) => {
+                    const neg = s.bearishCount;
+                    const pos = s.bullishCount;
+                    return (
+                      <li key={s.ticker} className="flex items-center gap-3 border-t border-[var(--hairline)] px-5 py-3">
+                        <button type="button" onClick={() => setChart(s.ticker)} className="min-w-0 flex-1 text-left">
+                          <span className="block text-[13.5px] font-medium hover:text-brand">{s.ticker}</span>
+                          <span className="block truncate text-[12px] text-muted-foreground">
+                            {COVERAGE[s.trend]} · {s.totalMentions} {s.totalMentions === 1 ? "mention" : "mentions"}
+                          </span>
+                        </button>
+                        <span className="flex h-1.5 w-14 overflow-hidden rounded-full bg-foreground/[0.08]" title={`${pos} positive, ${neg} negative`}>
+                          <span style={{ width: `${(pos / s.totalMentions) * 100}%`, background: "var(--green)" }} />
+                          <span style={{ width: `${(neg / s.totalMentions) * 100}%`, background: "var(--red)", marginLeft: "auto" }} />
+                        </span>
+                        <Button variant="ghost" size="sm" icon aria-label={basket.includes(s.ticker) ? `Remove ${s.ticker}` : `Add ${s.ticker}`} onClick={() => toggle(s.ticker)}>
+                          {basket.includes(s.ticker) ? <Check size={14} className="text-brand" /> : <Plus size={14} />}
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="m-0 border-t border-[var(--hairline)] px-5 py-6 text-[13px] text-muted-foreground">{feed.analyzing || feed.fetching ? "Appears once headlines are scored." : "No stocks mentioned yet."}</p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence>
-        {selectedArticle && (
-          <ArticleDrawer
-            article={selectedArticle}
-            onClose={() => setSelectedArticle(null)}
-          />
+        {basket.length > 0 && (
+          <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 lg:hidden">
+            <div className="flex max-w-full items-center gap-3 rounded-2xl bg-popover p-2 pl-4 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.5)] ring-1 ring-inset ring-[var(--hairline)]">
+              <span className="shrink-0 text-[13px] font-medium">Basket</span>
+              <div className="flex min-w-0 gap-1 overflow-x-auto">
+                {basket.map((t) => (
+                  <span key={t} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-foreground/[0.06] pl-2 pr-1 text-[12px] font-medium">
+                    {t}
+                    <button type="button" aria-label={`Remove ${t}`} onClick={() => toggle(t)} className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:text-foreground">
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <Button variant="primary" size="sm" disabled={basket.length < 2} onClick={() => navigate("/Optimizer")} title={basket.length < 2 ? "Add at least two stocks" : undefined}>
+                Optimize {basket.length}
+              </Button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showCart && (
-          <CartPanel
-            cart={cart}
-            signals={stockSignals}
-            onRemove={handleCartRemove}
-            onClear={handleCartClear}
-            onGoToOptimizer={handleGoToOptimizer}
-            onClose={() => setShowCart(false)}
-          />
+      <Sheet
+        open={!!open}
+        onClose={() => setOpen(null)}
+        title={open?.source}
+        description={open ? new Date(open.publishedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : undefined}
+        footer={
+          open && (
+            <a href={open.url} target="_blank" rel="noreferrer noopener" className={cn(buttonClass("primary", "md"), "w-full")}>
+              Read at {open.source} <ArrowUpRight size={14} />
+            </a>
+          )
+        }
+      >
+        {open && (
+          <>
+            {open.image && <img src={open.image} alt="" className="mb-5 aspect-[16/9] w-full rounded-xl object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />}
+            <h3 className="text-[19px] font-medium leading-snug tracking-[-0.02em]">{open.title}</h3>
+            {open.description && <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">{open.description}</p>}
+            <div className="mt-6 rounded-xl bg-foreground/[0.03] p-4 ring-1 ring-inset ring-[var(--hairline)]">
+              <div className="flex items-center gap-2 text-[13px] font-medium">
+                <span className="h-2 w-2 rounded-full" style={{ background: TONE[open.sentiment].dot }} />
+                {TONE[open.sentiment].label} tone
+              </div>
+              {open.sentimentReason && <p className="mb-0 mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{open.sentimentReason}</p>}
+              <p className="mb-0 mt-2 text-[11.5px] text-muted-foreground">Scored by a language model from the headline and summary. It can be wrong.</p>
+            </div>
+            {open.stocks.length > 0 && (
+              <div className="mt-6">
+                <div className="mb-2 text-[12.5px] text-muted-foreground">Stocks mentioned</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {open.stocks.map((t) => (
+                    <StockChip key={t} t={t} inBasket={basket.includes(t)} onToggle={toggle} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {open.via && (
+              <div className="mt-6">
+                <Badge tone="outline">via {open.via}</Badge>
+              </div>
+            )}
+          </>
         )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showCartToast && cart.length > 0 && !showCart && (
-          <CartToast
-            cartCount={cart.length}
-            onGoToOptimizer={handleGoToOptimizer}
-            onDismiss={() => setShowCartToast(false)}
-          />
-        )}
-      </AnimatePresence>
-    </div>
+      </Sheet>
+      <PriceSheet ticker={chart} name={chart ? feed.names[chart] : undefined} onClose={() => setChart(null)} />
+    </AppShell>
   );
 }

@@ -47,9 +47,9 @@ export function downloadPDF(data: {
   const gains = result.returns || 0;
   const y = parseFloat(years) || 1;
   const isLongTerm = y >= 1;
-  const ltcgExemption = 100000;
+  const ltcgExemption = 125000;
   const taxableGains = isLongTerm ? Math.max(0, gains - ltcgExemption) : gains;
-  const taxRate = isLongTerm ? 0.1 : 0.15;
+  const taxRate = isLongTerm ? 0.125 : 0.2;
   const taxAmount = Math.round(taxableGains * taxRate);
   const postTaxMaturity = result.maturity - taxAmount;
 
@@ -112,7 +112,7 @@ export function downloadPDF(data: {
   </div>
 
   <div class="section">
-    <div class="row"><span class="label">Capital Gains Type</span><span class="value"><span class="badge" style="background:${isLongTerm ? "#dcfce7" : "#fee2e2"}; color:${isLongTerm ? "#16a34a" : "#dc2626"}">${isLongTerm ? "LTCG (10%)" : "STCG (15%)"}</span></span></div>
+    <div class="row"><span class="label">Capital Gains Type</span><span class="value"><span class="badge" style="background:${isLongTerm ? "#dcfce7" : "#fee2e2"}; color:${isLongTerm ? "#16a34a" : "#dc2626"}">${isLongTerm ? "LTCG (12.5%)" : "STCG (20%)"}</span></span></div>
     <div class="row"><span class="label">Total Gains</span><span class="value green">${formatINR(gains)}</span></div>
     ${isLongTerm ? `<div class="row"><span class="label">LTCG Exemption</span><span class="value amber">- ${formatINR(Math.min(gains, ltcgExemption))}</span></div>` : ""}
     <div class="row"><span class="label">Estimated Tax</span><span class="value red">${formatINR(taxAmount)}</span></div>
@@ -122,7 +122,7 @@ export function downloadPDF(data: {
   <p class="disclaimer">
     This report is for informational purposes only and does not constitute financial or investment advice.
     Projections are based on assumed constant returns and may not reflect actual market performance.
-    Tax calculations are estimates based on current LTCG/STCG rules for equity mutual funds and may vary.
+    Tax calculations are estimates based on equity mutual fund rules in force from 23 July 2024 (12.5% LTCG above ₹1.25 lakh, 20% STCG) and may vary.
     Please consult a certified financial advisor before making investment decisions.
   </p>
 </body>
@@ -135,4 +135,34 @@ export function downloadPDF(data: {
   a.download = `SIP_Report_${new Date().toISOString().split("T")[0]}.html`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function sipSeries(m: number, r: number, y: number, su: number, lump = 0) {
+  const mr = r / 12 / 100;
+  const out: { year: string; invested: number; value: number }[] = [{ year: "0", invested: lump, value: lump }];
+  let value = lump;
+  let invested = lump;
+  let cur = m;
+  for (let yr = 1; yr <= y; yr++) {
+    for (let mo = 0; mo < 12; mo++) {
+      value = (value + cur) * (1 + mr);
+      invested += cur;
+    }
+    cur *= 1 + su / 100;
+    out.push({ year: String(yr), invested: Math.round(invested), value: Math.round(value) });
+  }
+  return out;
+}
+
+export function requiredSip(goal: number, r: number, y: number, su: number, lump = 0) {
+  const at = (m: number) => sipSeries(m, r, y, su, lump)[y]?.value ?? 0;
+  if (at(0) >= goal) return 0;
+  let lo = 0;
+  let hi = goal;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid) >= goal) hi = mid;
+    else lo = mid;
+  }
+  return Math.ceil(hi / 100) * 100;
 }

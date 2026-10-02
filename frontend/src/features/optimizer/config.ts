@@ -9,40 +9,36 @@ export const RISK_PROFILES: Array<{
   label: string;
   description: string;
   strategy: string;
-  returnRange: string;
-  border: string;
-  bg: string;
-  color: string;
+  limits: string;
+  minWeight: number;
+  maxWeight: number;
 }> = [
   {
     value: "conservative",
     label: "Conservative",
-    description: "Capital preservation · lower volatility · stable returns",
-    strategy: "Min Volatility",
-    returnRange: "8–12% p.a.",
-    border: "var(--blue-border)",
-    bg: "var(--blue-subtle)",
-    color: "var(--blue)",
+    description: "Steadier stocks get more: 60% of each weight comes from low volatility, 40% from the model’s score.",
+    strategy: "Low volatility + model score",
+    limits: "at least 4% per stock",
+    minWeight: 4,
+    maxWeight: 100,
   },
   {
     value: "balanced",
     label: "Balanced",
-    description: "Equal weight on growth & stability · optimal Sharpe",
-    strategy: "Max Sharpe",
-    returnRange: "12–18% p.a.",
-    border: "var(--green-border)",
-    bg: "var(--green-subtle)",
-    color: "var(--green)",
+    description: "Weights follow each stock’s model score: its predicted return times how reliable the model was for it in testing.",
+    strategy: "Model score weighted",
+    limits: "at least 3% per stock",
+    minWeight: 3,
+    maxWeight: 100,
   },
   {
     value: "aggressive",
     label: "Aggressive",
-    description: "Maximum return focus · concentrated high-ML positions",
-    strategy: "Aggressive Growth",
-    returnRange: "18–25% p.a.",
-    border: "var(--red-border)",
-    bg: "var(--red-subtle)",
-    color: "var(--red)",
+    description: "Weights follow expected return, blending the model’s forecast with past returns. The most concentrated profile.",
+    strategy: "Expected return weighted",
+    limits: "at least 3% per stock",
+    minWeight: 3,
+    maxWeight: 100,
   },
 ];
 
@@ -102,20 +98,3 @@ export function readAndClearCart(): string[] {
   }
   return [""];
 }
-
-export const fieldStyle = (focused: boolean): React.CSSProperties => ({
-  width: "100%",
-  height: "38px",
-  padding: "0 12px",
-  background: "hsl(var(--card) / 0.6)",
-  backdropFilter: "blur(8px)",
-  border: `1px solid ${focused ? "hsl(var(--foreground) / 0.35)" : "hsl(var(--border))"}`,
-  borderRadius: "7px",
-  fontSize: "14px",
-  fontFamily: "'Inter', sans-serif",
-  letterSpacing: "-0.01em",
-  color: "hsl(var(--foreground))",
-  outline: "none",
-  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-  boxShadow: focused ? "0 0 0 3px hsl(var(--foreground) / 0.06)" : "none",
-});

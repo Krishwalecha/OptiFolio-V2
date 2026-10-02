@@ -1,9 +1,9 @@
 import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
 
 export const CART_KEY = "portfolioCart_v1";
-export const CACHE_KEY = "financialNews_general_cache_v2";
-export const PORTFOLIO_CACHE_KEY = "financialNews_portfolio_cache_v2";
-export const CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+export const CACHE_KEY = "financialNews_general_cache_v3";
+export const PORTFOLIO_CACHE_KEY = "financialNews_portfolio_cache_v3";
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function normalizeNseTicker(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, " ");

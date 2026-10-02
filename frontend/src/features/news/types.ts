@@ -42,4 +42,5 @@ export interface StockSignal {
 export interface NewsCache {
   articles: Article[];
   fetchedAt: number;
+  names?: Record<string, string>;
 }
