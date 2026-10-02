@@ -4,7 +4,6 @@ import sys
 import tempfile
 import time
 import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -24,10 +23,11 @@ from config import (
 warnings.filterwarnings("ignore")
 
 
-def _cache_path(ticker: str) -> Path:
+def _cache_path(ticker: str, period: str = DATA_PERIOD) -> Path:
     Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
     safe = ticker.replace(".", "_").replace("^", "IDX_")
-    return Path(CACHE_DIR) / f"{safe}.pkl"
+    suffix = "" if period == DATA_PERIOD else f"_{period}"
+    return Path(CACHE_DIR) / f"{safe}{suffix}.pkl"
 
 
 def _is_fresh(path: Path) -> bool:
@@ -114,7 +114,7 @@ def fetch_single(
     interval: str = DATA_INTERVAL,
     use_cache: bool = True,
 ) -> Optional[pd.DataFrame]:
-    cache = _cache_path(ticker)
+    cache = _cache_path(ticker, period)
     if use_cache and _is_fresh(cache):
         return _load_cache(cache)
 
@@ -151,7 +151,7 @@ def fetch_all_stocks(
 
     # serve from cache
     for name, ticker in name_to_ticker.items():
-        cache = _cache_path(ticker)
+        cache = _cache_path(ticker, period)
         if use_cache and _is_fresh(cache):
             df = _load_cache(cache)
             if df is not None:
@@ -188,30 +188,26 @@ def fetch_all_stocks(
             name = ticker_to_name.get(ticker, ticker)
             data[name] = df
             if use_cache:
-                _save_cache(_cache_path(ticker), df)
+                _save_cache(_cache_path(ticker, period), df)
         # Tickers the batch missed
         need_download = [t for t in need_download if t not in batch]
 
-    # parallel fallback for stragglers────
+    # yfinance is not thread-safe, so stragglers are fetched sequentially with one retry
     if need_download:
         if verbose:
             print(f"  Single-fetching {len(need_download)} remaining ticker(s) …")
-        with ThreadPoolExecutor(max_workers=min(8, len(need_download))) as pool:
-            fut_map = {
-                pool.submit(fetch_single, t, period, interval, use_cache): t
-                for t in need_download
-            }
-            for fut in as_completed(fut_map):
-                ticker = fut_map[fut]
-                name = ticker_to_name.get(ticker, ticker)
-                df = fut.result()
-                if df is not None:
-                    data[name] = df
-                    if verbose:
-                        print(f"    ✓ {name:<15} ({ticker})  {len(df)} rows")
-                else:
-                    if verbose:
-                        print(f"    ✗ {name:<15} ({ticker})  skipped")
+        for ticker in need_download:
+            name = ticker_to_name.get(ticker, ticker)
+            df = fetch_single(ticker, period, interval, use_cache)
+            if df is None:
+                time.sleep(1.0)
+                df = fetch_single(ticker, period, interval, use_cache)
+            if df is not None:
+                data[name] = df
+                if verbose:
+                    print(f"    ✓ {name:<15} ({ticker})  {len(df)} rows")
+            elif verbose:
+                print(f"    ✗ {name:<15} ({ticker})  skipped")
 
     if verbose:
         ok = len(data)
@@ -237,5 +233,5 @@ def compute_log_returns(close_matrix: pd.DataFrame) -> pd.DataFrame:
     return np.log(close_matrix / close_matrix.shift(1)).dropna()
 
 
-def fetch_nifty50(use_cache: bool = True) -> Optional[pd.DataFrame]:
-    return fetch_single("^NSEI", period=DATA_PERIOD, use_cache=use_cache)
+def fetch_nifty50(use_cache: bool = True, period: str = DATA_PERIOD) -> Optional[pd.DataFrame]:
+    return fetch_single("^NSEI", period=period, use_cache=use_cache)

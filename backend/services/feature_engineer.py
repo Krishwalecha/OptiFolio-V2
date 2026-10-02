@@ -127,7 +127,7 @@ def _roc(close: pd.Series, period: int) -> pd.Series:
 
 
 def engineer_features(
-    df: pd.DataFrame, forward_days: int = FORWARD_RETURN_DAYS
+    df: pd.DataFrame, forward_days: int = FORWARD_RETURN_DAYS, keep_latest: bool = False
 ) -> pd.DataFrame:
     close = df["Close"].copy()
     high = df["High"].copy()
@@ -219,6 +219,11 @@ def engineer_features(
     log_close = np.log(close + 1e-10)
     feat_df["target"] = log_close.shift(-forward_days) - log_close
 
+    if keep_latest:
+        # keep the most recent rows (target unknown) so the forecast can use today's features
+        feat_cols = [c for c in feat_df.columns if c != "target"]
+        return feat_df.dropna(subset=feat_cols)
+
     # Drop NaN from warm-up and the last `forward_days` rows (no target)
     feat_df.dropna(inplace=True)
 
@@ -229,7 +234,9 @@ def _safe_engineer(
     name: str, df: pd.DataFrame, forward_days: int
 ) -> Tuple[str, pd.DataFrame | None]:
     try:
-        feat = engineer_features(df, forward_days)
+        import config as cfg
+
+        feat = engineer_features(df, forward_days, keep_latest=getattr(cfg, "MODEL_FRESH_FEATURES", False))
         if len(feat) >= MIN_ROWS_REQUIRED:
             return name, feat
         return name, None

@@ -62,3 +62,7 @@ BLEND_ALPHA_DEFAULT = 0.5
 
 TRADING_DAYS = 252
 RANDOM_SEED = 42
+
+# Per-stock engine: forecast from the latest trading day's features (not the last labelled row, which is
+# FORWARD_RETURN_DAYS old) and leave a FORWARD_RETURN_DAYS gap between training and test rows.
+MODEL_FRESH_FEATURES = True

@@ -152,8 +152,14 @@ def train_stock_model(
     tune: bool = True,
     test_ratio: float = TEST_SPLIT_RATIO,
 ) -> Optional[dict]:
+    import config as cfg
+
+    fresh = getattr(cfg, "MODEL_FRESH_FEATURES", False)
     feat_cols = _feat_cols(feat_df)
-    train_df, test_df = _ts_split(feat_df, test_ratio)
+    labelled = feat_df.dropna(subset=["target"]) if fresh else feat_df
+    train_df, test_df = _ts_split(labelled, test_ratio)
+    if fresh:
+        train_df = train_df.iloc[:-FORWARD_RETURN_DAYS]
 
     if len(train_df) < 150 or len(test_df) < 30:
         return None
@@ -207,10 +213,11 @@ def train_stock_model(
     annualised = raw_pred * (TRADING_DAYS / FORWARD_RETURN_DAYS)
     annualised = np.clip(annualised, -0.50, 0.50)
 
-    # confidence = 0.25 base + IC component + dir_acc above 50% component
-    ic_component = max(ic_score, 0.0)
+    # confidence = 0.25 base + IC component + dir_acc above 50% component.
+    # A negative IC (the model predicted backwards on held-out data) lowers confidence instead of being
+    # ignored; this raised average and tail returns in point-in-time tests (docs/model.md).
     dir_component = min(max(dir_acc - 0.50, 0.0) * 2.0, 1.0)
-    confidence = np.clip(0.25 + 0.50 * ic_component + 0.25 * dir_component, 0.25, 1.0)
+    confidence = np.clip(0.25 + 0.50 * ic_score + 0.25 * dir_component, 0.05, 1.0)
     composite_score = annualised * confidence
 
     # cache
@@ -324,6 +331,7 @@ def summarise_predictions(model_results: Dict[str, dict]) -> pd.DataFrame:
             {
                 "stock": name,
                 "predicted_return": res["predicted_return"],
+                "predicted_month": res["predicted_return_raw"],
                 "composite_score": res["composite_score"],
                 "ic": m["ic"],
                 "dir_accuracy": m["dir_accuracy"],
