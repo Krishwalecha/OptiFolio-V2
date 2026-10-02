@@ -5,10 +5,8 @@
 - Node.js 18+
 - Python 3.10+
 - A Supabase project
-- Groq API key
-- Gemini API key
-- n8n instance (cloud or self-hosted)
-- GNews API key
+- Groq API keys and Gemini API keys (comma-separated lists; more keys give more headroom)
+- NewsData and GNews API keys
 
 ---
 
@@ -44,7 +42,10 @@ node server.cjs
 PORT=3000
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
-N8N_WEBHOOK_URL=
+GROQ_KEYS=key1,key2
+GEMINI_KEYS=key1,key2
+NEWSDATA_KEYS=
+GNEWS_KEYS=
 ```
 
 ---
@@ -59,20 +60,15 @@ pip install -r requirements.txt
 The ML engine runs as a subprocess spawned by the Express server on each `/api/optimize` request — no separate server needed.
 
 **Key config** (`backend/config.py`):
-- `OPTUNA_N_TRIALS = 60` — Bayesian HPO trials per stock
+- `MODEL_V2` — horizon, target and skill-check windows for the pooled model
 - `MONTE_CARLO_SIMS = 15000` — random portfolio simulations
 - `CACHE_MAX_AGE_HOURS = 12` — OHLCV cache TTL
 
 ---
 
-## n8n (AI Chatbot)
+## AI assistant and headline scoring
 
-Set up an n8n workflow with:
-- Webhook trigger (POST)
-- Groq node with your LLM prompt
-- Response back to frontend
-
-Point `N8N_WEBHOOK_URL` in backend `.env` to your workflow's webhook URL.
+Both call Groq and Gemini directly from the API; no workflow tool is needed. Add keys to `GROQ_KEYS` and `GEMINI_KEYS`. A key that hits its quota rests only for the model that ran out; a rejected key rests for an hour.
 
 ---
 

@@ -1,13 +1,14 @@
 # Environment Variables
 .env
-.env.local
+.env.*
 
 # Keep templates
 !.env.example
 
-# IDE
+# IDE and local tooling
 .vscode/
 .idea/
+.claude/
 
 # OS
 .DS_Store
@@ -18,5 +19,10 @@ Thumbs.db
 
 node_modules/
 __pycache__/
+.pytest_cache/
+*.pkl
 
 cache
+
+# Build output
+frontend/dist/

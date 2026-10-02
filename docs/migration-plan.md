@@ -7,7 +7,7 @@ All migration phases are done. This file is kept for reference.
 - Monorepo restructured into `frontend/` + `backend/` + `docs/`
 - Python ML engine integrated as subprocess (XGBoost, Optuna, MPT)
 - Supabase auth + portfolio history wired up
-- n8n + Groq + Gemini integrated for AI features
+- Groq + Gemini integrated for AI features (n8n removed)
 - GNews API added for news sentiment
 - Render deployment with RAM optimizations (float32, gc.collect, del statements)
 - Vercel deployment for frontend
