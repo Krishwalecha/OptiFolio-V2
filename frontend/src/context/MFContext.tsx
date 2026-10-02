@@ -289,22 +289,29 @@ export const MFProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     // Cache stale or missing — fetch fresh
-    fetchAllFunds()
-      .then((data) => {
-        setFunds(data);
-        writeCache(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        // Try serving stale cache rather than nothing
-        const stale = readCache();
-        if (stale && stale.funds.length > 0) {
-          setFunds(stale.funds);
-        } else {
-          setError("Failed to load mutual fund data.");
-        }
-        setLoading(false);
-      });
+    const load = () =>
+      fetchAllFunds()
+        .then((data) => {
+          setFunds(data);
+          writeCache(data);
+          setLoading(false);
+        })
+        .catch(() => {
+          // Try serving stale cache rather than nothing
+          const stale = readCache();
+          if (stale && stale.funds.length > 0) {
+            setFunds(stale.funds);
+          } else {
+            setError("Failed to load mutual fund data.");
+          }
+          setLoading(false);
+        });
+
+    // defer so ~60 mfapi requests never compete with the first page paint
+    const onSip = window.location.pathname.toLowerCase().startsWith("/sipcalculator");
+    if (onSip) load();
+    else if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(() => load(), { timeout: 4000 });
+    else setTimeout(load, 2500);
   }, []);
 
   return (

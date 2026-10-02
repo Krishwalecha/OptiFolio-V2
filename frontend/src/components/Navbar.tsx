@@ -1,409 +1,163 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Moon, Sun } from "lucide-react";
-import { useTheme } from "@/hooks/useTheme";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Menu as MenuIcon, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/hooks/useTheme";
+import { Button, ThemeIcon, Wordmark, buttonClass } from "@/ui";
+import { cn } from "@/lib/utils";
+
+const LINKS = [
+  { label: "Optimizer", path: "/Optimizer" },
+  { label: "Method", path: "/About" },
+  { label: "Markets", path: "/FinancialNews" },
+  { label: "SIP planner", path: "/SIPCalculator" },
+  { label: "Learn", path: "/Learn" },
+];
+const MORE = [
+  { label: "Portfolios", path: "/Portfolios" },
+  { label: "Community", path: "/Community" },
+];
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 const Navbar: React.FC = () => {
+  const { isLoggedIn } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { isLoggedIn, logout, userName, userEmail } = useAuth();
-  const location = useLocation();
-  const isDark = theme === "dark";
+  const { pathname } = useLocation();
   const [scrolled, setScrolled] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState<string | null>(null);
+  const shell = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 4);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const on = () => setScrolled(window.scrollY > 12);
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => window.removeEventListener("scroll", on);
   }, []);
-
+  useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node))
-        setProfileOpen(false);
+    if (!open) return;
+    const down = (e: MouseEvent) => !shell.current?.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", key);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [open]);
 
-  useEffect(() => {
-    setProfileOpen(false);
-  }, [location.pathname]);
-
-  // Updated nav structure
-  const navTabs = [
-    { label: "Home", path: "/" },
-    { label: "Optimizer", path: "/Optimizer" },
-    { label: "Portfolios", path: "/Portfolios" },
-    { label: "News", path: "/FinancialNews" },
-    { label: "SIP", path: "/SIPCalculator" },
-    { label: "About", path: "/About" },
-  ];
-
-  const borderColor = isDark
-    ? scrolled
-      ? "rgba(255,255,255,0.08)"
-      : "rgba(255,255,255,0.06)"
-    : scrolled
-      ? "rgba(0,0,0,0.08)"
-      : "rgba(0,0,0,0.06)";
-
-  const bg = isDark
-    ? scrolled
-      ? "rgba(9,9,9,0.88)"
-      : "rgba(9,9,9,1)"
-    : scrolled
-      ? "rgba(255,255,255,0.88)"
-      : "rgba(255,255,255,1)";
+  const isActive = (p: string) => pathname.toLowerCase() === p.toLowerCase() || pathname.toLowerCase().startsWith(p.toLowerCase() + "/");
 
   return (
-    <header
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        width: "100%",
-        height: "52px",
-        background: bg,
-        backdropFilter: scrolled ? "blur(20px) saturate(180%)" : "none",
-        WebkitBackdropFilter: scrolled ? "blur(20px) saturate(180%)" : "none",
-        borderBottom: `1px solid ${borderColor}`,
-        transition: "background 0.2s ease, border-color 0.2s ease",
-      }}
-    >
+    <header className="sticky top-0 z-50 flex h-16 items-center px-3 sm:px-5">
       <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-          padding: "0 24px",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          position: "relative",
-        }}
-      >
-      {/* Logo */}
-      <Link
-        to="/"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          textDecoration: "none",
-          flexShrink: 0,
-          userSelect: "none",
-        }}
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <rect
-            x="1"
-            y="1"
-            width="22"
-            height="22"
-            rx="6"
-            fill={isDark ? "#f5f5f5" : "#0d0d0d"}
-          />
-
-          <circle
-            cx="12"
-            cy="12"
-            r="6"
-            stroke={isDark ? "#0d0d0d" : "#f5f5f5"}
-            strokeWidth="1.6"
-          />
-
-          <path
-            d="M9 13L11.5 10L15 12"
-            stroke={isDark ? "#0d0d0d" : "#f5f5f5"}
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
-        <span
-          style={{
-            fontFamily: "'Inter', sans-serif",
-            fontWeight: 600,
-            fontSize: "14.5px",
-            letterSpacing: "-0.025em",
-            color: isDark ? "#f0f0f0" : "#0d0d0d",
-            lineHeight: 1,
-          }}
-        >
-          OptiFolio
-        </span>
-      </Link>
-
-      {/* Center Nav */}
-      <nav
-        style={{
-          position: "absolute",
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          alignItems: "center",
-          gap: "1px",
-        }}
-      >
-        {navTabs.map((tab) => {
-          const isActive = location.pathname === tab.path;
-          return (
-            <Link
-              key={tab.path}
-              to={tab.path}
-              className="nav-link"
-              style={{
-                color: isActive
-                  ? isDark
-                    ? "#f0f0f0"
-                    : "#0d0d0d"
-                  : isDark
-                    ? "rgba(240,240,240,0.48)"
-                    : "rgba(13,13,13,0.48)",
-                background: isActive
-                  ? isDark
-                    ? "rgba(255,255,255,0.07)"
-                    : "rgba(0,0,0,0.05)"
-                  : "transparent",
-                fontWeight: isActive ? 500 : 400,
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.color = isDark
-                    ? "rgba(240,240,240,0.72)"
-                    : "rgba(13,13,13,0.72)";
-                  (e.currentTarget as HTMLElement).style.background = isDark
-                    ? "rgba(255,255,255,0.04)"
-                    : "rgba(0,0,0,0.03)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.color = isDark
-                    ? "rgba(240,240,240,0.48)"
-                    : "rgba(13,13,13,0.48)";
-                  (e.currentTarget as HTMLElement).style.background =
-                    "transparent";
-                }
-              }}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Right side */}
-      <div
-        style={{
-          marginLeft: "auto",
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-        }}
-      >
-        <button
-          onClick={toggleTheme}
-          aria-label="Toggle theme"
-          style={{
-            width: "30px",
-            height: "30px",
-            borderRadius: "7px",
-            border: `1px solid ${isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.09)"}`,
-            background: "transparent",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            color: isDark ? "rgba(240,240,240,0.5)" : "rgba(13,13,13,0.5)",
-            transition: "background 0.12s ease, color 0.12s ease",
-            flexShrink: 0,
-          }}
-          onMouseEnter={(e) => {
-            const el = e.currentTarget;
-            el.style.background = isDark
-              ? "rgba(255,255,255,0.07)"
-              : "rgba(0,0,0,0.05)";
-            el.style.color = isDark ? "#f0f0f0" : "#0d0d0d";
-          }}
-          onMouseLeave={(e) => {
-            const el = e.currentTarget;
-            el.style.background = "transparent";
-            el.style.color = isDark
-              ? "rgba(240,240,240,0.5)"
-              : "rgba(13,13,13,0.5)";
-          }}
-        >
-          {isDark ? <Sun size={13} /> : <Moon size={13} />}
-        </button>
-
-        {!isLoggedIn ? (
-          <>
-            <Link
-              to="/SignIn"
-              style={{
-                textDecoration: "none",
-                padding: "5px 12px",
-                borderRadius: "7px",
-                fontSize: "13px",
-                fontWeight: 400,
-                letterSpacing: "-0.01em",
-                color: isDark ? "rgba(240,240,240,0.5)" : "rgba(13,13,13,0.5)",
-                transition: "color 0.12s ease",
-                border: `1px solid ${isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.09)"}`,
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.color = isDark
-                  ? "#f0f0f0"
-                  : "#0d0d0d";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.color = isDark
-                  ? "rgba(240,240,240,0.5)"
-                  : "rgba(13,13,13,0.5)";
-              }}
-            >
-              Sign in
-            </Link>
-            <Link
-              to="/SignUp"
-              style={{
-                textDecoration: "none",
-                padding: "5px 12px",
-                borderRadius: "7px",
-                fontSize: "13px",
-                fontWeight: 500,
-                letterSpacing: "-0.01em",
-                background: isDark ? "#f0f0f0" : "#0d0d0d",
-                color: isDark ? "#0d0d0d" : "#f0f0f0",
-                transition: "opacity 0.12s ease",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.opacity = "0.82";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.opacity = "1";
-              }}
-            >
-              Get started
-            </Link>
-          </>
-        ) : (
-          <div ref={profileRef} style={{ position: "relative" }}>
-            <button
-              onClick={() => setProfileOpen((v) => !v)}
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "50%",
-                background: isDark ? "#f0f0f0" : "#0d0d0d",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: isDark ? "#0d0d0d" : "#f0f0f0",
-                fontSize: "11px",
-                fontWeight: 600,
-                flexShrink: 0,
-                transition: "opacity 0.12s ease",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.opacity = "0.82";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.opacity = "1";
-              }}
-            >
-              {userName ? userName.charAt(0).toUpperCase() : "U"}
-            </button>
-            {profileOpen && (
-              <div
-                className="animate-slide-down"
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "36px",
-                  width: "200px",
-                  background: isDark ? "#0f0f0f" : "#fff",
-                  border: `1px solid ${isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.09)"}`,
-                  borderRadius: "10px",
-                  padding: "6px",
-                  boxShadow: isDark
-                    ? "0 8px 40px rgba(0,0,0,0.7)"
-                    : "0 8px 40px rgba(0,0,0,0.1)",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "8px 10px 10px",
-                    borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"}`,
-                    marginBottom: "6px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      letterSpacing: "-0.01em",
-                      color: isDark ? "#f0f0f0" : "#0d0d0d",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    {userName || "User"}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "11.5px",
-                      color: isDark
-                        ? "rgba(240,240,240,0.35)"
-                        : "rgba(13,13,13,0.35)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontFamily: "'JetBrains Mono', monospace",
-                    }}
-                  >
-                    {userEmail}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    logout();
-                    setProfileOpen(false);
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "6px 10px",
-                    background: "transparent",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: "13px",
-                    letterSpacing: "-0.01em",
-                    color: "var(--red)",
-                    fontWeight: 400,
-                    transition: "background 0.12s ease",
-                    fontFamily: "'Inter', sans-serif",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background =
-                      "var(--red-subtle)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background =
-                      "transparent";
-                  }}
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
+        ref={shell}
+        className={cn(
+          "relative mx-auto w-full transition-[max-width,background-color,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          scrolled || open ? "max-w-[920px]" : "max-w-[1200px]",
         )}
-      </div>
+      >
+        <div
+          className={cn(
+            "flex h-12 items-center gap-2 rounded-full pl-4 pr-1.5 ring-1 ring-inset transition-[background-color,box-shadow,--tw-ring-color] duration-500",
+            scrolled || open
+              ? "bg-background/75 shadow-[0_10px_40px_-14px_rgba(0,0,0,0.35)] ring-[var(--hairline)] backdrop-blur-xl backdrop-saturate-150"
+              : "bg-transparent ring-transparent",
+          )}
+        >
+          <Link to="/" className="mr-2 shrink-0 no-underline" aria-label="OptiFolio home">
+            <Wordmark size={20} />
+          </Link>
+
+          <nav className="hidden flex-1 items-center justify-center md:flex" aria-label="Main" onMouseLeave={() => setHover(null)}>
+            {LINKS.map((l) => {
+              const active = isActive(l.path);
+              return (
+                <Link
+                  key={l.path}
+                  to={l.path}
+                  onMouseEnter={() => setHover(l.path)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn("relative rounded-full px-3.5 py-1.5 text-[13.5px] no-underline transition-colors duration-200", active || hover === l.path ? "text-foreground" : "text-muted-foreground")}
+                >
+                  {hover === l.path && <motion.span layoutId="nav-hover" className="absolute inset-0 rounded-full bg-foreground/[0.06]" transition={{ duration: 0.3, ease: EASE }} />}
+                  <span className="relative">{l.label}</span>
+                  {active && <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-brand" />}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-1">
+            <Button variant="ghost" icon className="rounded-full" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+              <ThemeIcon dark={theme === "dark"} size={16} />
+            </Button>
+            {isLoggedIn ? (
+              <Link to="/Dashboard" className={cn(buttonClass("primary", "sm"), "hidden rounded-full pl-4 pr-3 sm:inline-flex")}>
+                Open app <ArrowRight size={14} />
+              </Link>
+            ) : (
+              <>
+                <Link to="/SignIn" className="hidden rounded-full px-3 py-1.5 text-[13.5px] text-muted-foreground no-underline transition-colors hover:text-foreground sm:inline-flex">
+                  Sign in
+                </Link>
+                <Link to="/SignUp" className={cn(buttonClass("primary", "sm"), "hidden rounded-full pl-4 pr-3 sm:inline-flex")}>
+                  Get started <ArrowRight size={14} />
+                </Link>
+              </>
+            )}
+            <Button variant="ghost" icon className="rounded-full md:hidden" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+              {open ? <X size={18} /> : <MenuIcon size={18} />}
+            </Button>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: EASE }}
+              className="absolute inset-x-0 top-[calc(100%+8px)] origin-top rounded-3xl bg-popover p-2 shadow-[0_24px_60px_-18px_rgba(0,0,0,0.5)] ring-1 ring-inset ring-[var(--hairline)] md:hidden"
+            >
+              <nav className="flex flex-col" aria-label="Mobile">
+                {[...LINKS, ...MORE].map((l, i) => (
+                  <motion.div key={l.path} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 * i, duration: 0.2 }}>
+                    <Link
+                      to={l.path}
+                      className={cn(
+                        "flex h-11 items-center justify-between rounded-2xl px-4 text-[15px] no-underline transition-colors hover:bg-foreground/[0.05]",
+                        isActive(l.path) ? "font-medium text-foreground" : "text-foreground/85",
+                      )}
+                    >
+                      {l.label}
+                      {isActive(l.path) && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
+                    </Link>
+                  </motion.div>
+                ))}
+              </nav>
+              <div className="mt-2 grid gap-2 border-t border-[var(--hairline)] p-2 pt-3">
+                {isLoggedIn ? (
+                  <Link to="/Dashboard" className={cn(buttonClass("primary", "lg"), "rounded-full")}>
+                    Open app <ArrowRight size={15} />
+                  </Link>
+                ) : (
+                  <>
+                    <Link to="/SignUp" className={cn(buttonClass("primary", "lg"), "rounded-full")}>
+                      Get started <ArrowRight size={15} />
+                    </Link>
+                    <Link to="/SignIn" className={cn(buttonClass("secondary", "lg"), "rounded-full")}>
+                      Sign in
+                    </Link>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </header>
   );

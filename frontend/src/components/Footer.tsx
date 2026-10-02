@@ -1,118 +1,60 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { useTheme } from "@/hooks/useTheme";
+import { FitWordmark, Mark } from "@/ui";
 
-const Footer: React.FC = () => {
-  const year = new Date().getFullYear();
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+const COLS = [
+  {
+    title: "Product",
+    links: [
+      ["Optimizer", "/Optimizer"],
+      ["Portfolios", "/Portfolios"],
+      ["Markets", "/FinancialNews"],
+      ["SIP planner", "/SIPCalculator"],
+    ],
+  },
+  {
+    title: "Learn",
+    links: [
+      ["Method", "/About"],
+      ["Lessons", "/Learn"],
+      ["Community", "/Community"],
+    ],
+  },
+];
 
-  const links = [
-    { label: "Dashboard", path: "/" },
-    { label: "Portfolios", path: "/Portfolios" },
-    { label: "News", path: "/FinancialNews" },
-    { label: "SIP", path: "/SIPCalculator" },
-    { label: "About", path: "/About" },
-  ];
-
-  return (
-    <footer style={{ borderTop: "1px solid hsl(var(--border))" }}>
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-          padding: "20px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          position: "relative",
-        }}
-      >
-      {/* Wordmark */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <rect
-            x="1"
-            y="1"
-            width="22"
-            height="22"
-            rx="6"
-            fill={isDark ? "#f5f5f5" : "#0d0d0d"}
-          />
-
-          <circle
-            cx="12"
-            cy="12"
-            r="6"
-            stroke={isDark ? "#0d0d0d" : "#f5f5f5"}
-            strokeWidth="1.6"
-          />
-
-          <path
-            d="M9 13L11.5 10L15 12"
-            stroke={isDark ? "#0d0d0d" : "#f5f5f5"}
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
-        <span
-          style={{
-            fontFamily: "'Inter', sans-serif",
-            fontWeight: 600,
-            fontSize: "13px",
-            letterSpacing: "-0.02em",
-            color: "hsl(var(--foreground))",
-          }}
-        >
-          OptiFolio
-        </span>
-      </div>
-
-      {/* Nav links — absolutely centered like Navbar */}
-      <nav style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "2px" }}>
-        {links.map((l) => (
-          <Link
-            key={l.path}
-            to={l.path}
-            style={{
-              textDecoration: "none",
-              fontSize: "12.5px",
-              color: "hsl(var(--muted-foreground))",
-              padding: "3px 8px",
-              borderRadius: "5px",
-              transition: "color 0.12s ease, background 0.12s ease",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "hsl(var(--foreground))";
-              (e.currentTarget as HTMLElement).style.background =
-                "hsl(var(--secondary))";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "hsl(var(--muted-foreground))";
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }}
-          >
-            {l.label}
-          </Link>
+const Footer: React.FC = () => (
+  <footer className="mt-auto border-t border-[var(--hairline)]">
+    <div className="mx-auto max-w-[1200px] px-5 pt-14 sm:px-8">
+      <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
+        <div className="max-w-sm">
+          <Mark size={22} />
+          <p className="mt-4 text-[13.5px] leading-relaxed text-muted-foreground">
+            A portfolio optimizer for NSE stocks that shows its work. Built as an independent project; not a registered investment adviser, and nothing here is a recommendation to buy or sell.
+          </p>
+        </div>
+        {COLS.map((c) => (
+          <div key={c.title}>
+            <div className="text-[12.5px] text-muted-foreground">{c.title}</div>
+            <ul className="m-0 mt-3 list-none space-y-2 p-0">
+              {c.links.map(([label, to]) => (
+                <li key={to}>
+                  <Link to={to} className="text-[13.5px] text-foreground/85 no-underline transition-colors hover:text-foreground">
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </nav>
-
-      {/* Copyright */}
-      <span
-        style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: "11px",
-          color: "hsl(var(--muted-foreground))",
-          letterSpacing: "0.02em",
-        }}
-      >
-        © {year} OptiFolio · Not financial advice
-      </span>
       </div>
-    </footer>
-  );
-};
+      <div className="mt-14 flex flex-col justify-between gap-2 text-[12px] text-muted-foreground sm:flex-row">
+        <span>© {new Date().getFullYear()} OptiFolio. End-of-day data from Yahoo Finance and AMFI.</span>
+      </div>
+      <div className="mt-12 w-full select-none text-foreground" aria-hidden="true">
+        <FitWordmark />
+      </div>
+    </div>
+  </footer>
+);
 
 export default Footer;

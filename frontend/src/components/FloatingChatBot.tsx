@@ -1,468 +1,235 @@
-import React, { useState, useRef, useEffect } from "react";
-import { sendMessageToChatbot } from "@/services/chatbotService";
-import { useTheme } from "@/hooks/useTheme";
-import { X, Send, MessageSquare } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowUp, MessageSquare, RotateCcw, X } from "lucide-react";
+import { sendMessageWithHistory } from "@/services/chatbotService";
+import { Button, Dots, Mark } from "@/ui";
+import { cn } from "@/lib/utils";
 
-interface Message {
-  text: string;
-  sender: "user" | "bot";
-  error?: boolean;
+interface Msg {
+  role: "user" | "assistant";
+  content: string;
+  failed?: boolean;
 }
 
-function renderMarkdown(text: string, color: string) {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
+const KEY = "optifolio:chat";
+const HIDE_ON = ["/", "/signin", "/signup"];
 
-  lines.forEach((line, i) => {
-    if (!line.trim()) {
-      elements.push(<br key={`br-${i}`} />);
-      return;
-    }
+const SUGGESTIONS: Record<string, string[]> = {
+  "/optimizer": ["Explain my last result in plain words", "Why are some stocks at the limit?", "What is the difference between the three profiles?"],
+  "/portfolios": ["What does drift mean for my portfolio?", "When should I rebalance?", "How is return since saving calculated?"],
+  "/dashboard": ["How is my latest portfolio doing?", "What does the rank correlation of the model mean?", "What should I check before investing?"],
+  "/financialnews": ["How is headline tone scored?", "Should news change my allocation?", "What moves Indian markets most?"],
+  "/sipcalculator": ["Step-up SIP or a bigger fixed SIP?", "How is tax on equity funds calculated?", "What return is realistic to assume?"],
+  "/learn": ["Explain Sharpe ratio simply", "What is diversification, really?", "What is a drawdown?"],
+};
+const DEFAULT = ["How does OptiFolio pick weights?", "What is a good Sharpe ratio?", "How do SIPs work?"];
 
-    // numbered list: "1. text" or "1) text"
-    const listMatch = line.match(/^(\d+)[.)]\s+(.+)/);
-    if (listMatch) {
-      elements.push(
-        <div key={i} style={{ display: "flex", gap: "6px", marginTop: i === 0 ? 0 : "4px" }}>
-          <span style={{ opacity: 0.5, flexShrink: 0 }}>{listMatch[1]}.</span>
-          <span>{parseBold(listMatch[2])}</span>
-        </div>
-      );
-      return;
-    }
-
-    // bullet list: "- text" or "• text"
-    const bulletMatch = line.match(/^[-•]\s+(.+)/);
-    if (bulletMatch) {
-      elements.push(
-        <div key={i} style={{ display: "flex", gap: "6px", marginTop: i === 0 ? 0 : "4px" }}>
-          <span style={{ opacity: 0.5, flexShrink: 0 }}>•</span>
-          <span>{parseBold(bulletMatch[1])}</span>
-        </div>
-      );
-      return;
-    }
-
-    elements.push(<div key={i} style={{ marginTop: i === 0 ? 0 : "4px" }}>{parseBold(line)}</div>);
-  });
-
-  return <>{elements}</>;
+function inline(text: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith("**") && p.endsWith("**") ? <strong key={i} className="font-medium text-foreground">{p.slice(2, -2)}</strong> : p));
 }
 
-function parseBold(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) =>
-    p.startsWith("**") && p.endsWith("**")
-      ? <strong key={i} style={{ fontWeight: 600 }}>{p.slice(2, -2)}</strong>
-      : p
-  );
+function Markdown({ text }: { text: string }) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const out: React.ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  const flush = () => {
+    if (!list) return;
+    const Tag = list.ordered ? "ol" : "ul";
+    out.push(
+      <Tag key={out.length} className={cn("my-1.5 space-y-1 pl-5", list.ordered ? "list-decimal" : "list-disc")}>
+        {list.items.map((it, i) => (
+          <li key={i}>{inline(it)}</li>
+        ))}
+      </Tag>,
+    );
+    list = null;
+  };
+  for (const raw of lines) {
+    const l = raw.trim();
+    const ol = l.match(/^\d+[.)]\s+(.*)/);
+    const ul = l.match(/^[-*•]\s+(.*)/);
+    if (ol || ul) {
+      const ordered = !!ol;
+      if (!list || list.ordered !== ordered) {
+        flush();
+        list = { ordered, items: [] };
+      }
+      list.items.push((ol || ul)![1]);
+      continue;
+    }
+    flush();
+    if (!l) continue;
+    const h = l.match(/^#{1,4}\s+(.*)/);
+    out.push(
+      <p key={out.length} className={cn("my-1.5", h && "font-medium text-foreground")}>
+        {inline(h ? h[1] : l)}
+      </p>,
+    );
+  }
+  flush();
+  return <>{out}</>;
 }
 
 export default function FloatingChatbot() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const chatboxRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-
-  useEffect(() => {
-    if (chatboxRef.current) {
-      chatboxRef.current.scrollTop = chatboxRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    if (isOpen) setTimeout(() => inputRef.current?.focus(), 100);
-  }, [isOpen]);
-
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    const userMessage = input.trim();
-    setMessages((prev) => [...prev, { text: userMessage, sender: "user" }]);
-    setInput("");
-    setIsLoading(true);
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState<Msg[]>(() => {
     try {
-      const response = await sendMessageToChatbot(userMessage);
-      setMessages((prev) => [
-        ...prev,
-        { text: response.message, sender: "bot", error: !response.success },
-      ]);
+      return JSON.parse(sessionStorage.getItem(KEY) || "[]");
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: "Something went wrong. Please try again.",
-          sender: "bot",
-          error: true,
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
+      return [];
     }
+  });
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const list = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(KEY, JSON.stringify(msgs.slice(-30)));
+    } catch {
+      /* storage blocked */
+    }
+    list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
+  }, [msgs, busy]);
+
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => field.current?.focus());
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (HIDE_ON.includes(pathname.toLowerCase())) return null;
+
+  const send = async (text: string) => {
+    const q = text.trim();
+    if (!q || busy) return;
+    const history = msgs.filter((m) => !m.failed).slice(-10).map(({ role, content }) => ({ role, content }));
+    setMsgs((m) => [...m, { role: "user", content: q }]);
+    setInput("");
+    setBusy(true);
+    const r = await sendMessageWithHistory(q, history);
+    setMsgs((m) => [...m, { role: "assistant", content: r.message, failed: !r.success }]);
+    setBusy(false);
   };
 
-  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  // Colors
-  const bg = isDark ? "#0a0a0a" : "#fff";
-  const border = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
-  const headerBg = isDark ? "#111" : "#fafafa";
-  const chatBg = isDark ? "#0d0d0d" : "#f7f7f7";
-  const fg = isDark ? "#f0f0f0" : "#0d0d0d";
-  const muted = isDark ? "rgba(240,240,240,0.4)" : "rgba(13,13,13,0.4)";
-  const userBubble = isDark ? "#f0f0f0" : "#0d0d0d";
-  const userText = isDark ? "#0d0d0d" : "#f0f0f0";
-  const botBubble = isDark ? "#1a1a1a" : "#efefef";
-  const botText = isDark ? "#e8e8e8" : "#1a1a1a";
+  const key = Object.keys(SUGGESTIONS).find((k) => pathname.toLowerCase().startsWith(k));
+  const ideas = key ? SUGGESTIONS[key] : DEFAULT;
 
   return (
     <>
-      {/* ── Trigger button ── */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          aria-label="Open chat"
-          style={{
-            position: "fixed",
-            bottom: "24px",
-            right: "24px",
-            width: "44px",
-            height: "44px",
-            borderRadius: "12px",
-            background: isDark ? "#f0f0f0" : "#0d0d0d",
-            color: isDark ? "#0d0d0d" : "#f0f0f0",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: isDark
-              ? "0 4px 24px rgba(0,0,0,0.6), 0 1px 4px rgba(0,0,0,0.4)"
-              : "0 4px 24px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.08)",
-            zIndex: 999,
-            transition: "opacity 0.15s ease, transform 0.15s ease",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.opacity = "0.8";
-            (e.currentTarget as HTMLElement).style.transform = "scale(1.05)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.opacity = "1";
-            (e.currentTarget as HTMLElement).style.transform = "scale(1)";
-          }}
-        >
-          <MessageSquare size={18} />
-        </button>
-      )}
-
-      {/* ── Chat window ── */}
-      {isOpen && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "24px",
-            right: "24px",
-            width: "360px",
-            maxWidth: "calc(100vw - 32px)",
-            height: "520px",
-            maxHeight: "calc(100vh - 48px)",
-            zIndex: 1000,
-            background: bg,
-            border: `1px solid ${border}`,
-            borderRadius: "12px",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-            boxShadow: isDark
-              ? "0 16px 64px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.5)"
-              : "0 16px 64px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06)",
-            animation: "fade-up 0.25s cubic-bezier(0.16,1,0.3,1) both",
-          }}
-        >
-          {/* Header */}
-          <div
-            style={{
-              padding: "14px 16px",
-              borderBottom: `1px solid ${border}`,
-              background: headerBg,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexShrink: 0,
-            }}
+      <AnimatePresence>
+        {!open && (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => setOpen(true)}
+            aria-label="Ask Folio, the OptiFolio assistant"
+            className="fixed bottom-5 right-5 z-[60] flex h-11 items-center gap-2 rounded-full bg-foreground pl-3.5 pr-4 text-[13.5px] font-medium text-background shadow-[0_12px_32px_-10px_rgba(0,0,0,0.5)] transition-transform hover:-translate-y-0.5"
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <rect
-                  x="1"
-                  y="1"
-                  width="22"
-                  height="22"
-                  rx="6"
-                  fill={isDark ? "#f5f5f5" : "#0d0d0d"}
-                />
+            <MessageSquare size={16} /> Ask Folio
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="6"
-                  stroke={isDark ? "#0d0d0d" : "#f5f5f5"}
-                  strokeWidth="1.6"
-                />
-
-                <path
-                  d="M9 13L11.5 10L15 12"
-                  stroke={isDark ? "#0d0d0d" : "#f5f5f5"}
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div>
-                <div
-                  style={{
-                    fontSize: "13.5px",
-                    fontWeight: 500,
-                    letterSpacing: "-0.015em",
-                    color: fg,
-                  }}
-                >
-                  Investment Assistant
-                </div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    color: muted,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "5px",
-                      height: "5px",
-                      borderRadius: "50%",
-                      background: "var(--green)",
-                      display: "inline-block",
-                      animation: "pulse-dot 2.4s ease-in-out infinite",
-                    }}
-                  />
-                  Online
-                </div>
+      <AnimatePresence>
+        {open && (
+          <motion.section
+            role="dialog"
+            aria-label="Folio assistant"
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed inset-x-3 bottom-3 z-[60] flex h-[min(620px,calc(100vh-24px))] flex-col overflow-hidden rounded-3xl bg-popover shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-[var(--hairline)] sm:inset-x-auto sm:bottom-5 sm:right-5 sm:w-[400px]"
+          >
+            <header className="flex items-center gap-3 border-b border-[var(--hairline)] px-4 py-3">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-foreground/[0.05]">
+                <Mark size={16} />
+              </span>
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="text-[14px] font-medium">Folio</div>
+                <div className="text-[11.5px] text-muted-foreground">Markets, investing and OptiFolio. Not advice.</div>
               </div>
+              {msgs.length > 0 && (
+                <Button variant="ghost" size="sm" icon aria-label="Start over" onClick={() => setMsgs([])}>
+                  <RotateCcw size={14} />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" icon aria-label="Close" onClick={() => setOpen(false)}>
+                <X size={16} />
+              </Button>
+            </header>
+
+            <div ref={list} className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
+              {!msgs.length && (
+                <div className="pt-2">
+                  <p className="mt-0 text-[13.5px] leading-relaxed text-muted-foreground">Ask about your results, a metric, SIPs or how the optimizer works. It can see the page you are on and your latest result.</p>
+                  <div className="mt-4 flex flex-col items-start gap-2">
+                    {ideas.map((s) => (
+                      <button key={s} type="button" onClick={() => send(s)} className="rounded-xl px-3 py-2 text-left text-[13px] ring-1 ring-inset ring-[var(--hairline)] transition-colors hover:bg-foreground/[0.04]">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {msgs.map((m, i) =>
+                m.role === "user" ? (
+                  <div key={i} className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-[13.5px] leading-relaxed text-background">
+                    {m.content}
+                  </div>
+                ) : (
+                  <div key={i} className={cn("max-w-[92%] text-[13.5px] leading-relaxed text-foreground/85", m.failed && "text-[var(--red)]")}>
+                    <Markdown text={m.content} />
+                  </div>
+                ),
+              )}
+              {busy && (
+                <div className="flex items-center gap-2 py-1 text-muted-foreground">
+                  <Dots size={18} />
+                </div>
+              )}
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: muted,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                transition: "background 0.12s ease, color 0.12s ease",
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                send(input);
               }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background = isDark
-                  ? "rgba(255,255,255,0.07)"
-                  : "rgba(0,0,0,0.05)";
-                (e.currentTarget as HTMLElement).style.color = fg;
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background =
-                  "transparent";
-                (e.currentTarget as HTMLElement).style.color = muted;
-              }}
+              className="border-t border-[var(--hairline)] p-3"
             >
-              <X size={14} />
-            </button>
-          </div>
-
-          {/* Messages */}
-          <div
-            ref={chatboxRef}
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "16px",
-              background: chatBg,
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-            }}
-          >
-            {messages.length === 0 && (
-              <div style={{ textAlign: "center", padding: "32px 16px" }}>
-                <div style={{ fontSize: "28px", marginBottom: "12px" }}>👋</div>
-                <div
-                  style={{
-                    fontSize: "13.5px",
-                    fontWeight: 500,
-                    color: fg,
-                    marginBottom: "6px",
-                    letterSpacing: "-0.01em",
+              <div className="flex items-end gap-2 rounded-2xl bg-card p-1.5 pl-3.5 ring-1 ring-inset ring-[var(--hairline)] focus-within:ring-2 focus-within:ring-brand">
+                <textarea
+                  ref={field}
+                  rows={1}
+                  value={input}
+                  maxLength={1500}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      send(input);
+                    }
                   }}
-                >
-                  How can I help?
-                </div>
-                <div
-                  style={{ fontSize: "12.5px", color: muted, lineHeight: 1.55 }}
-                >
-                  Ask me anything about portfolio optimization, investing
-                  strategies, or market insights.
-                </div>
+                  placeholder="Ask about markets or your portfolio"
+                  aria-label="Message"
+                  className="max-h-28 min-h-[32px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground/70"
+                />
+                <Button type="submit" variant="primary" size="sm" icon disabled={!input.trim() || busy} aria-label="Send">
+                  <ArrowUp size={15} />
+                </Button>
               </div>
-            )}
-
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    msg.sender === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "78%",
-                    padding: "9px 13px",
-                    borderRadius:
-                      msg.sender === "user"
-                        ? "10px 10px 2px 10px"
-                        : "10px 10px 10px 2px",
-                    background: msg.sender === "user" ? userBubble : botBubble,
-                    color: msg.sender === "user" ? userText : botText,
-                    fontSize: "13.5px",
-                    lineHeight: 1.55,
-                    letterSpacing: "-0.006em",
-                    border: msg.error ? "1px solid var(--red-border)" : "none",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {msg.sender === "bot"
-                    ? renderMarkdown(msg.text, botText)
-                    : msg.text}
-                </div>
-              </div>
-            ))}
-
-            {isLoading && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  color: muted,
-                  fontSize: "13px",
-                }}
-              >
-                <div className="typing-dots">
-                  <span>.</span>
-                  <span>.</span>
-                  <span>.</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Input */}
-          <div
-            style={{
-              padding: "12px",
-              borderTop: `1px solid ${border}`,
-              background: bg,
-              display: "flex",
-              gap: "8px",
-              alignItems: "center",
-              flexShrink: 0,
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder="Ask anything…"
-              disabled={isLoading}
-              style={{
-                flex: 1,
-                height: "36px",
-                padding: "0 12px",
-                background: isDark ? "#141414" : "#f7f7f7",
-                border: `1px solid ${border}`,
-                borderRadius: "8px",
-                fontSize: "13.5px",
-                color: fg,
-                outline: "none",
-                fontFamily: "'Inter', sans-serif",
-                letterSpacing: "-0.006em",
-                transition: "border-color 0.15s ease",
-              }}
-              onFocus={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = isDark
-                  ? "rgba(255,255,255,0.2)"
-                  : "rgba(0,0,0,0.2)";
-              }}
-              onBlur={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = border;
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={isLoading || !input.trim()}
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                border: "none",
-                background:
-                  !input.trim() || isLoading
-                    ? isDark
-                      ? "#1a1a1a"
-                      : "#e8e8e8"
-                    : isDark
-                      ? "#f0f0f0"
-                      : "#0d0d0d",
-                color:
-                  !input.trim() || isLoading
-                    ? muted
-                    : isDark
-                      ? "#0d0d0d"
-                      : "#f0f0f0",
-                cursor: !input.trim() || isLoading ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "background 0.15s ease, opacity 0.15s ease",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => {
-                if (input.trim() && !isLoading)
-                  (e.currentTarget as HTMLElement).style.opacity = "0.8";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.opacity = "1";
-              }}
-            >
-              <Send size={13} />
-            </button>
-          </div>
-        </div>
-      )}
+            </form>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </>
   );
 }
