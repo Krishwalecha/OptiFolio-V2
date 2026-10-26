@@ -31,7 +31,7 @@ from services import (
     summarise_predictions,
     train_all_models,
 )
-from services.portfolio_optimizer import compute_allocation
+from services.portfolio_optimizer import compute_allocation, covariance_matrix, expected_returns, monte_carlo
 
 MOMENTUM_STRENGTH = 0.35
 BLEND_MAX = 0.5
@@ -184,6 +184,17 @@ def _cap(w: pd.Series, hi: float) -> pd.Series:
     return w / w.sum()
 
 
+def _held_frontier(weights: pd.Series, daily_returns: pd.DataFrame, model_results: dict, lo: float, hi: Optional[float]):
+    # the optimizer's mu, cov and random portfolios cover only the model's candidates, but the momentum tilt and the
+    # even-split blend also hold the other stocks; measure the chosen point and the cloud on the stocks actually held
+    held = list(weights.index)
+    exp_ret = expected_returns(held, daily_returns, model_results, BLEND_ALPHA)
+    cov = covariance_matrix(held, daily_returns)
+    mc = monte_carlo(exp_ret, cov, rfr=RISK_FREE_RATE, lo=lo, hi=hi if hi is not None else 1.0)
+    w = (weights / weights.sum()).values
+    return float(w @ exp_ret.values), float(np.sqrt(w @ cov.values @ w)), mc
+
+
 def _pipeline(stock_data: dict, benchmark_close: Optional[pd.Series], profile: dict, lo: float, hi: Optional[float], tune: bool):
     close_matrix = build_close_matrix(stock_data)
     daily_returns = compute_log_returns(close_matrix)
@@ -279,6 +290,7 @@ def _pipeline(stock_data: dict, benchmark_close: Optional[pd.Series], profile: d
         "close_prices": close_prices,
         "benchmark": benchmark,
         "summary": prediction_summary,
+        "model_results": model_results,
         "candidates": candidates,
         "dropped": dropped,
     }
@@ -309,7 +321,7 @@ def run_optimize(tickers: list[str], investment: float = 100_000, risk: str = "b
         live = _window(data10, end)
 
         res = _pipeline(live, nifty_close, profile, lo, hi, tune)
-        weights, opt, daily_returns = res["weights"], res["opt"], res["daily_returns"]
+        weights, daily_returns = res["weights"], res["daily_returns"]
         # a stock whose slice of the money cannot buy one share would show a weight but hold nothing
         unaffordable = []
         budget = investment * (1 - core)
@@ -322,10 +334,7 @@ def run_optimize(tickers: list[str], investment: float = 100_000, risk: str = "b
             unaffordable.append({"ticker": t, "price": float(px[t]), "slice": float(weights[t] * budget)})
             weights = weights.drop(t)
             weights = weights / weights.sum()
-        exp_ret, cov = opt["expected_returns"], opt["cov_matrix"]
-        ew = weights.reindex(exp_ret.index).fillna(0.0)
-        e_ret = float(ew.values @ exp_ret.values)
-        e_vol = float(np.sqrt(ew.values @ cov.values @ ew.values))
+        e_ret, e_vol, mc = _held_frontier(weights, daily_returns, res["model_results"], lo, hi)
         sleeve_point = [round(e_vol, 4), round(e_ret, 4)]
 
         core_close = None
@@ -352,7 +361,6 @@ def run_optimize(tickers: list[str], investment: float = 100_000, risk: str = "b
         port_ret = portfolio_returns(weights.to_dict(), daily_returns)
         metrics = full_metrics(port_ret, RISK_FREE_RATE, res["benchmark"], label=res["label"])
 
-        mc = opt["mc_df"]
         pts = mc.sample(min(320, len(mc)), random_state=7)
         frontier = {
             "simulated": [[round(float(v), 4), round(float(r), 4)] for v, r in zip(pts["volatility"], pts["return"])],
